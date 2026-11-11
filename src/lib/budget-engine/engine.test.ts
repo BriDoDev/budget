@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeBudget, computeCategoryMonth } from "./engine";
+import { computeBudget, computeCategoryMonth, splitFundedCredit } from "./engine";
 import type { EngineCategory } from "./types";
 
 const JAN = "2026-01-01";
@@ -146,5 +146,68 @@ describe("computeBudget", () => {
 
   it("returns no months when there is no data", () => {
     expect(computeBudget({ categories, assignments: [], activity: [] }).months).toEqual([]);
+  });
+});
+
+describe("credit cards", () => {
+  const cardCategories: EngineCategory[] = [
+    { id: "income", kind: "income" },
+    { id: "groceries", kind: "standard" },
+    { id: "visa-payment", kind: "credit_card_payment", linkedAccountId: "visa" },
+  ];
+  const income = { categoryId: "income", month: JAN, amount: 500_000, source: "cash" as const };
+
+  it("moves funded card spending into the card's payment category", () => {
+    const result = computeBudget({
+      categories: cardCategories,
+      assignments: [{ categoryId: "groceries", month: JAN, amount: 100_000 }],
+      activity: [income, { categoryId: "groceries", month: JAN, amount: -60_000, source: "credit", accountId: "visa" }],
+    });
+
+    expect(result.getCategoryMonth("groceries", JAN)).toMatchObject({ available: 40_000, fundedCredit: -60_000 });
+    expect(result.getCategoryMonth("visa-payment", JAN)).toMatchObject({ activity: 60_000, available: 60_000 });
+    expect(result.getMonth(JAN)?.readyToAssign).toBe(400_000);
+  });
+
+  it("moves only the funded part when card spending exceeds the category", () => {
+    const result = computeBudget({
+      categories: cardCategories,
+      assignments: [{ categoryId: "groceries", month: JAN, amount: 50_000 }],
+      activity: [income, { categoryId: "groceries", month: JAN, amount: -80_000, source: "credit", accountId: "visa" }],
+    });
+
+    expect(result.getCategoryMonth("groceries", JAN)).toMatchObject({ creditOverspent: -30_000, fundedCredit: -50_000 });
+    expect(result.getCategoryMonth("visa-payment", JAN)?.available).toBe(50_000);
+  });
+
+  it("spends the payment category when the card is paid and flags overpayment as cash overspending", () => {
+    const result = computeBudget({
+      categories: cardCategories,
+      assignments: [{ categoryId: "groceries", month: JAN, amount: 100_000 }],
+      activity: [income, { categoryId: "groceries", month: JAN, amount: -60_000, source: "credit", accountId: "visa" }],
+      payments: [{ accountId: "visa", month: JAN, amount: -75_000 }],
+      throughMonth: FEB,
+    });
+
+    expect(result.getCategoryMonth("visa-payment", JAN)).toMatchObject({ available: -15_000, cashOverspent: -15_000 });
+    expect(result.getMonth(FEB)?.readyToAssign).toBe(400_000 - 15_000);
+  });
+
+  it("returns money from the payment category when a card refund lands in a category", () => {
+    const result = computeBudget({
+      categories: cardCategories,
+      assignments: [{ categoryId: "visa-payment", month: JAN, amount: 30_000 }],
+      activity: [income, { categoryId: "groceries", month: JAN, amount: 20_000, source: "credit", accountId: "visa" }],
+    });
+
+    expect(result.getCategoryMonth("groceries", JAN)?.available).toBe(20_000);
+    expect(result.getCategoryMonth("visa-payment", JAN)?.available).toBe(10_000);
+  });
+
+  it("splits funded spending between cards and keeps refunds on their own card", () => {
+    const shares = splitFundedCredit(-90_000, new Map([["amex", -100_000], ["visa", -50_000], ["store", 30_000]]));
+
+    expect(Object.fromEntries(shares)).toEqual({ store: 30_000, amex: -80_000, visa: -40_000 });
+    expect(splitFundedCredit(-10_000, undefined).size).toBe(0);
   });
 });

@@ -1,7 +1,10 @@
 /**
- * One-time (re-runnable) import of a YNAB plan into the household database.
+ * Syncs a YNAB plan into the household database (one way, YNAB → app).
  *
  *   pnpm import:ynab
+ *
+ * The first run imports the whole plan and prints how our numbers compare with
+ * YNAB's. Later runs only fetch what changed in YNAB since the previous one.
  *
  * Reads YNAB_ACCESS_TOKEN, YNAB_PLAN_ID, ALLOWED_EMAILS, HOUSEHOLD_NAME and the
  * Supabase variables from .env.local. Every e-mail in ALLOWED_EMAILS must have
@@ -9,12 +12,14 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseAllowedEmails } from "../src/lib/auth/allowed-emails";
+import { formatMilliunits } from "../src/lib/money";
+import { currentMonthKey } from "../src/lib/month";
 import { createAdminClient } from "../src/lib/supabase/admin";
-import { fetchPlanExport } from "../src/lib/ynab/client";
-import { mapPlanExport } from "../src/lib/ynab/map";
+import { comparePlanWithEngine } from "../src/lib/ynab/parity";
+import { syncYnabPlan } from "../src/lib/ynab/sync";
 
-const BATCH_SIZE = 500;
 const USERS_PAGE_SIZE = 1000;
+const MAX_MISMATCHES_SHOWN = 10;
 
 async function main(): Promise<void> {
   const accessToken = requireEnv("YNAB_ACCESS_TOKEN");
@@ -29,29 +34,35 @@ async function main(): Promise<void> {
   const userIds = await resolveUserIds(supabase, memberEmails);
   const householdId = await ensureHousehold(supabase, householdName, userIds);
 
-  console.log(`Downloading YNAB plan "${planId}"…`);
-  const plan = await fetchPlanExport(accessToken, planId);
-  const rows = mapPlanExport(plan, { householdId, importedAt: new Date().toISOString() });
+  console.log(`Syncing YNAB plan "${planId}"…`);
+  const result = await syncYnabPlan(supabase, { accessToken, planId, householdId });
 
-  await upsertRows(supabase, "budgets", [rows.budget]);
-  await upsertRows(supabase, "accounts", rows.accounts);
-  await upsertRows(supabase, "category_groups", rows.categoryGroups);
-  await upsertRows(supabase, "categories", rows.categories);
-  await upsertRows(supabase, "payees", rows.payees);
-  await upsertRows(supabase, "month_assignments", rows.assignments, "category_id,month");
-  await upsertRows(supabase, "transactions", rows.transactions);
-  await upsertRows(supabase, "subtransactions", rows.subtransactions);
+  console.log(`${result.mode === "full" ? "Imported" : "Updated"} "${result.budgetName}" (${result.mode} sync):`);
+  console.table({ ...result.upserted, deleted: result.deleted });
 
-  console.log(`Imported "${rows.budget.name}" into household ${householdId}:`);
-  console.table({
-    accounts: rows.accounts.length,
-    categoryGroups: rows.categoryGroups.length,
-    categories: rows.categories.length,
-    payees: rows.payees.length,
-    assignments: rows.assignments.length,
-    transactions: rows.transactions.length,
-    subtransactions: rows.subtransactions.length,
-  });
+  if (result.mode === "full") {
+    printParity(result);
+  }
+}
+
+function printParity(result: Awaited<ReturnType<typeof syncYnabPlan>>): void {
+  const report = comparePlanWithEngine(result.plan, result.rows, currentMonthKey());
+  const currency = {
+    isoCode: result.rows.budget.currency_iso_code,
+    decimalDigits: result.rows.budget.currency_decimal_digits,
+  };
+  const money = (amount: number) => formatMilliunits(amount, currency);
+
+  console.log(`\nCheck against YNAB for ${report.month.slice(0, 7)}:`);
+  if (report.readyToAssign) {
+    const { ynab, ours } = report.readyToAssign;
+    console.log(`  Ready to Assign: YNAB ${money(ynab)}, this app ${money(ours)}${ynab === ours ? " ✓" : " ✗"}`);
+  }
+  const matching = report.categoriesCompared - report.mismatches.length;
+  console.log(`  Category balances: ${matching} of ${report.categoriesCompared} match`);
+  for (const mismatch of report.mismatches.slice(0, MAX_MISMATCHES_SHOWN)) {
+    console.log(`    ${mismatch.name}: YNAB ${money(mismatch.ynab)}, this app ${money(mismatch.ours)}`);
+  }
 }
 
 async function resolveUserIds(supabase: SupabaseClient, emails: string[]): Promise<string[]> {
@@ -117,21 +128,6 @@ async function ensureHousehold(supabase: SupabaseClient, name: string, userIds: 
     throw new Error(`Could not add household members: ${membersError.message}`);
   }
   return householdId;
-}
-
-async function upsertRows(
-  supabase: SupabaseClient,
-  table: string,
-  rows: object[],
-  onConflict = "id",
-): Promise<void> {
-  for (let start = 0; start < rows.length; start += BATCH_SIZE) {
-    const batch = rows.slice(start, start + BATCH_SIZE);
-    const { error } = await supabase.from(table).upsert(batch, { onConflict });
-    if (error) {
-      throw new Error(`Could not upsert ${table} (rows ${start}-${start + batch.length - 1}): ${error.message}`);
-    }
-  }
 }
 
 function requireEnv(name: string): string {

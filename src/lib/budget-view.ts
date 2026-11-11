@@ -1,35 +1,47 @@
-import { buildActivityLines, computeBudget, type MonthResult } from "./budget-engine";
-import type {
-  AccountRow,
-  BudgetRow,
-  CategoryGroupRow,
-  CategoryRow,
-  MonthAssignmentRow,
-  SubtransactionRow,
-  TransactionRow,
-} from "./db/types";
+import {
+  computeBudget,
+  computeGoalStatus,
+  CREDIT_ACCOUNT_TYPES,
+  type ActivityLine,
+  type EngineResult,
+  type Goal,
+  type GoalStatus,
+  type MonthResult,
+  type PaymentLine,
+} from "./budget-engine";
+import type { BudgetRow, CategoryGroupRow, CategoryRow, MonthAssignmentRow } from "./db/types";
 import { addMonths, toMonthKey, type MonthKey } from "./month";
 import type { CurrencySettings } from "./money";
 
+/** Aggregated activity as returned by the `budget_activity` SQL function. */
+export interface ActivityAggregate {
+  kind: "activity" | "payment";
+  category_id: string | null;
+  account_id: string;
+  account_type: string;
+  month: string;
+  amount: number;
+}
+
 export interface BudgetRows {
   budget: BudgetRow;
-  accounts: AccountRow[];
   groups: CategoryGroupRow[];
   categories: CategoryRow[];
-  assignments: MonthAssignmentRow[];
-  transactions: TransactionRow[];
-  subtransactions: SubtransactionRow[];
+  assignments: Pick<MonthAssignmentRow, "category_id" | "month" | "amount">[];
+  activity: ActivityAggregate[];
 }
 
 export interface CategoryLine {
   id: string;
   name: string;
   kind: CategoryRow["kind"];
+  note: string | null;
   assigned: number;
   activity: number;
   available: number;
   cashOverspent: number;
   creditOverspent: number;
+  goal: GoalStatus | null;
 }
 
 export interface CategoryGroupLine {
@@ -47,40 +59,57 @@ export interface BudgetMonthView {
   previousMonth: MonthKey;
   nextMonth: MonthKey;
   summary: MonthResult;
+  /** Sum of what goals still need this month. */
+  underfunded: number;
   groups: CategoryGroupLine[];
 }
 
-/** Runs the budget engine over stored rows and shapes the month screen. Hidden and internal categories are omitted. */
-export function buildBudgetMonthView(rows: BudgetRows, month: MonthKey): BudgetMonthView {
-  const result = computeBudget({
-    categories: rows.categories.map((category) => ({ id: category.id, kind: category.kind })),
+/** Runs the engine over the stored assignments and aggregated activity of a budget. */
+export function runEngine(rows: Omit<BudgetRows, "budget" | "groups">, throughMonth: MonthKey): EngineResult {
+  const activity: ActivityLine[] = [];
+  const payments: PaymentLine[] = [];
+  for (const row of rows.activity) {
+    const month = toMonthKey(row.month);
+    if (row.kind === "payment") {
+      payments.push({ accountId: row.account_id, month, amount: row.amount });
+    } else if (row.category_id) {
+      activity.push({
+        categoryId: row.category_id,
+        month,
+        amount: row.amount,
+        source: CREDIT_ACCOUNT_TYPES.has(row.account_type) ? "credit" : "cash",
+        accountId: row.account_id,
+      });
+    }
+  }
+
+  return computeBudget({
+    categories: rows.categories.map((category) => ({
+      id: category.id,
+      kind: category.kind,
+      linkedAccountId: category.linked_account_id,
+    })),
     assignments: rows.assignments.map((assignment) => ({
       categoryId: assignment.category_id,
       month: toMonthKey(assignment.month),
       amount: assignment.amount,
     })),
-    activity: buildActivityLines(
-      rows.accounts.map((account) => ({ id: account.id, type: account.type, onBudget: account.on_budget })),
-      rows.transactions.map((transaction) => ({
-        id: transaction.id,
-        accountId: transaction.account_id,
-        date: transaction.date,
-        amount: transaction.amount,
-        categoryId: transaction.category_id,
-      })),
-      rows.subtransactions.map((sub) => ({
-        transactionId: sub.transaction_id,
-        amount: sub.amount,
-        categoryId: sub.category_id,
-      })),
-    ),
-    throughMonth: month,
+    activity,
+    payments,
+    throughMonth,
   });
+}
+
+/** Shapes the month screen. Hidden and internal categories are omitted. */
+export function buildBudgetMonthView(rows: BudgetRows, month: MonthKey): BudgetMonthView {
+  const result = runEngine(rows, month);
+  const roundingStep = 10 ** Math.max(0, 3 - rows.budget.currency_decimal_digits);
 
   const visibleCategories = rows.categories
     .filter((category) => !category.hidden && (category.kind === "standard" || category.kind === "credit_card_payment"))
     .sort((a, b) => a.sort_index - b.sort_index);
 
+  let underfunded = 0;
   const groups: CategoryGroupLine[] = [...rows.groups]
     .filter((group) => !group.hidden && !group.is_internal)
     .sort((a, b) => a.sort_index - b.sort_index)
@@ -89,15 +118,22 @@ export function buildBudgetMonthView(rows: BudgetRows, month: MonthKey): BudgetM
         .filter((category) => category.group_id === group.id)
         .map((category): CategoryLine => {
           const values = result.getCategoryMonth(category.id, month);
+          const goal = toGoal(category);
+          const goalStatus = goal
+            ? computeGoalStatus(goal, month, (lookupMonth) => result.getCategoryMonth(category.id, lookupMonth), roundingStep)
+            : null;
+          underfunded += goalStatus?.underfunded ?? 0;
           return {
             id: category.id,
             name: category.name,
             kind: category.kind,
+            note: category.note,
             assigned: values?.assigned ?? 0,
             activity: values?.activity ?? 0,
             available: values?.available ?? 0,
             cashOverspent: values?.cashOverspent ?? 0,
             creditOverspent: values?.creditOverspent ?? 0,
+            goal: goalStatus,
           };
         });
       return {
@@ -121,7 +157,22 @@ export function buildBudgetMonthView(rows: BudgetRows, month: MonthKey): BudgetM
     previousMonth: addMonths(month, -1),
     nextMonth: addMonths(month, 1),
     summary: result.getMonth(month) ?? emptyMonth(month),
+    underfunded,
     groups,
+  };
+}
+
+export function toGoal(category: CategoryRow): Goal | null {
+  if (!category.goal_type || !category.goal_target) {
+    return null;
+  }
+  return {
+    type: category.goal_type,
+    target: category.goal_target,
+    targetMonth: category.goal_target_month ? toMonthKey(category.goal_target_month) : null,
+    cadenceMonths: category.goal_cadence_months,
+    needsWholeAmount: category.goal_needs_whole_amount,
+    createdMonth: category.goal_created_month ? toMonthKey(category.goal_created_month) : null,
   };
 }
 

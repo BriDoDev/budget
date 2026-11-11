@@ -25,3 +25,11 @@ describe("month helpers", () => {
     expect(isMonthKey("2026-13-01")).toBe(false);
   });
 });
+
+describe("monthsApart", () => {
+  it("counts whole months in either direction", async () => {
+    const { monthsApart } = await import("./month");
+    expect(monthsApart("2026-11-01", "2027-02-01")).toBe(3);
+    expect(monthsApart("2026-11-01", "2026-09-01")).toBe(-2);
+  });
+});

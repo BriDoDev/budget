@@ -114,14 +114,75 @@ ready_to_assign[m]     = available_to_budget[m] - funded_in_future[m]
   "Inflow: Ready to Assign" category with a date in month `m`.
 - `budgeted[m]` is the sum of assignments of all non-internal categories.
 
-### Not implemented yet (Unknown / next slices)
+### Goals (Observed)
 
-- **Credit card payment funding**: when spending on a card is covered by a
-  category (`budgeted_credit_outflows`), YNAB moves that amount into the card's
-  payment category (`subcategory_credit_amount_preceding`, `credit_amount_adjusted`).
-  The engine currently treats payment categories like regular envelopes.
-- `additional_to_be_budgeted` (only present on credit-card payment
-  calculations) is treated as 0.
-- Goals/targets (`calculateGoals`, `goalEffectiveTargetAmount`, cadences),
-  scheduled transactions and `age_of_money`.
-- Uncategorized outflows (`uncategorized_cash_outflows`) are ignored.
+From `calculateGoals` and `goalEffectiveTargetAmount` in the shared library.
+`target` is the goal amount, `C` the months left in the current goal period
+including this one (0 after the due month), `balance` the category balance and
+`budgeted` this month's assignment.
+
+| Goal type (wire) | Funded so far | Month target | Underfunded |
+|---|---|---|---|
+| Monthly funding (`MF`), debt (`DEBT`) | `budgeted` | `target` | `max(0, target - budgeted)` |
+| Needed for spending (`NEED`) | assignments since the period started, plus the positive balance carried into it unless the goal "needs the whole amount" | `ceil((target - (funded - budgeted)) / C)` | `max(0, monthTarget - budgeted)` |
+| Target balance by date (`TBD`) | `balance` | `ceil((target - balance + budgeted) / C)` | `max(0, monthTarget - budgeted)` |
+| Target balance (`TB`) | `balance` | 0 | 0 (progress only) |
+
+Month targets are rounded up to the smallest currency unit. For `NEED` and
+`TBD`, when the month's assignment is negative and nothing is needed, the
+client reports `max(0, target - funded)` instead. The first period of a dated
+goal runs from its creation month to the target date; later periods repeat by
+the goal cadence. Implemented in `src/lib/budget-engine/goals.ts`.
+
+Weekly `NEED` goals use `goalEffectiveTargetAmountForWeeklyNeed` (the target
+times the occurrences of the weekday in the month). This app approximates them
+as a monthly amount of `target * 52 / 12` when importing. (Design decision)
+
+For credit card payment categories the effective target is the absolute value
+of the card's negative balance, i.e. "pay the card in full". (Observed, not implemented)
+
+### Scheduled transactions (Observed)
+
+Frequencies in the client enum: `Never`, `Daily`, `Weekly`, `EveryOtherWeek`,
+`TwiceAMonth`, `Every4Weeks`, `Monthly`, `EveryOtherMonth`, `Every3Months`,
+`Every4Months`, `TwiceAYear`, `Yearly`, `EveryOtherYear`. The official API uses
+the same names in lower camel case, which is what this app stores. The exact
+date arithmetic of `TwiceAMonth` was not located; `src/lib/schedule.ts`
+alternates between the first date's day and 15 days later. (Inferred)
+
+### Credit card payment categories (Inferred)
+
+The per-transaction attribution (`credit_amount_adjusted`,
+`subcategory_credit_amount_preceding`) lives in the Kotlin-compiled part of the
+library and was not decoded. The engine derives the same outcome per month from
+the observed split above:
+
+```
+funded_credit[category]   = credit_outflows - unbudgeted_credit_outflows
+payment_category.activity = Σ -funded_credit of the card's spending
+                          + Σ -(transfers recorded on the card account)
+```
+
+So covered card spending moves into the card's payment category, paying the
+card spends it, and a refund on the card moves money back. When one category
+has spending on several cards in a month, the funded part is shared between
+them in proportion to that spending. The import prints a comparison against
+YNAB's own balances so differences from this approximation are visible.
+
+## 5. How this pass was done
+
+- `rea analyze_javascript_application` produced the application graph of
+  `assets/main-*.js` (Evidence `ev_c694b8308c2f2690ea7e545dbee3145f8fe595d2e9b5f2d2d020b0c8db34a151`).
+- The same analysis could not complete on `assets/wrapper-*.js` (8.3 MB): it
+  exhausted the 1 GiB analyzer heap, and with 8 GiB it hit the 300 s per-source
+  deadline (partial Evidence `ev_731a027ed41a4c0f58d7b84ffbfaa17a403835f5e502c213e48b348a4f4f2595`).
+  The formulas in this document were therefore read directly from the function
+  bodies in that file, located by their identifiers.
+- Nothing here was observed at runtime; all findings are static.
+
+## 6. Still not reproduced
+
+- Exact per-transaction credit attribution and `additional_to_be_budgeted`.
+- Weekly goal periods, "pay in full" targets for card payment categories and goal snoozing.
+- `age_of_money`, uncategorized outflows in the month header, and loan/debt account calculations.
+- Direct bank import (`be_account_mappings`), which this app intentionally does not implement.

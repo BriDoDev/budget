@@ -1,0 +1,239 @@
+"use client";
+
+import { useActionState, useState } from "react";
+import { saveTransaction } from "@/app/actions/transactions";
+import { inputClass, labelClass, linkButtonClass, primaryButtonClass } from "@/components/ui";
+import { IDLE_STATE } from "@/lib/actions/form";
+import { parseAmountInput } from "@/lib/money";
+import {
+  SPLIT_CATEGORY,
+  type CategoryOptionGroup,
+  type SplitDraft,
+  type TransactionDraft,
+} from "@/lib/transaction-draft";
+
+interface TransactionFormProps {
+  budgetId: string;
+  accounts: Array<{ id: string; name: string }>;
+  /** Set on an account page, where the account is not a choice. */
+  fixedAccountId?: string;
+  categoryGroups: CategoryOptionGroup[];
+  incomeCategoryId: string | null;
+  payeeNames: string[];
+  today: string;
+  returnTo: string;
+  /** Transaction being edited; omitted when creating. */
+  initial?: TransactionDraft;
+}
+
+const FLAG_OPTIONS = [
+  { value: "", label: "Sin bandera" },
+  { value: "red", label: "Roja" },
+  { value: "orange", label: "Naranja" },
+  { value: "yellow", label: "Amarilla" },
+  { value: "green", label: "Verde" },
+  { value: "blue", label: "Azul" },
+  { value: "purple", label: "Morada" },
+];
+const EMPTY_SPLITS: SplitDraft[] = [
+  { categoryId: "", amount: "" },
+  { categoryId: "", amount: "" },
+];
+
+export function TransactionForm(props: TransactionFormProps) {
+  const [state, formAction, isPending] = useActionState(saveTransaction, IDLE_STATE);
+
+  return (
+    <form action={formAction} className="flex flex-col gap-3">
+      {/* Remounting the fields clears them after each saved transaction. */}
+      <TransactionFields key={`${props.initial?.id ?? "new"}:${state.version}`} {...props} isPending={isPending} />
+      {state.message ? (
+        <p role="status" className={`text-sm ${state.ok ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+          {state.message}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
+function TransactionFields({
+  budgetId,
+  accounts,
+  fixedAccountId,
+  categoryGroups,
+  incomeCategoryId,
+  payeeNames,
+  today,
+  returnTo,
+  initial,
+  isPending,
+}: TransactionFormProps & { isPending: boolean }) {
+  const [categoryId, setCategoryId] = useState(initial?.categoryId ?? "");
+  const [transferAccountId, setTransferAccountId] = useState(initial?.transferAccountId ?? "");
+  const [splits, setSplits] = useState<SplitDraft[]>(initial?.splits.length ? initial.splits : EMPTY_SPLITS);
+  const [outflow, setOutflow] = useState(initial?.outflow ?? "");
+  const [inflow, setInflow] = useState(initial?.inflow ?? "");
+
+  const transferTargets = accounts.filter((account) => account.id !== fixedAccountId);
+  const isTransfer = transferAccountId !== "";
+  const isSplit = categoryId === SPLIT_CATEGORY && !isTransfer;
+  const total = Math.abs((parseAmountInput(inflow || "0") ?? 0) - (parseAmountInput(outflow || "0") ?? 0));
+  const splitTotal = splits.reduce((sum, split) => sum + (parseAmountInput(split.amount) ?? 0), 0);
+  const remaining = (total - splitTotal) / 1000;
+
+  const updateSplit = (index: number, patch: Partial<SplitDraft>) =>
+    setSplits((current) => current.map((split, position) => (position === index ? { ...split, ...patch } : split)));
+
+  const categoryOptions = categoryGroups.map((group) => (
+    <optgroup key={group.name} label={group.name}>
+      {group.options.map((option) => (
+        <option key={option.id} value={option.id}>{option.name}</option>
+      ))}
+    </optgroup>
+  ));
+
+  return (
+    <>
+      <input type="hidden" name="budgetId" value={budgetId} />
+      <input type="hidden" name="id" value={initial?.id ?? ""} />
+      <input type="hidden" name="returnTo" value={returnTo} />
+      <input type="hidden" name="splits" value={JSON.stringify(isSplit ? splits : [])} />
+      {fixedAccountId ? <input type="hidden" name="accountId" value={fixedAccountId} /> : null}
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {fixedAccountId ? null : (
+          <label className={labelClass}>
+            Cuenta
+            <select name="accountId" defaultValue={initial?.accountId ?? accounts[0]?.id} required className={inputClass}>
+              {accounts.map((account) => (
+                <option key={account.id} value={account.id}>{account.name}</option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label className={labelClass}>
+          Fecha
+          <input type="date" name="date" defaultValue={initial?.date ?? today} required className={inputClass} />
+        </label>
+        <label className={labelClass}>
+          Beneficiario
+          <input
+            name="payeeName"
+            list="payee-names"
+            defaultValue={initial?.payeeName ?? ""}
+            disabled={isTransfer}
+            placeholder={isTransfer ? "Transferencia" : "A quién le pagaste"}
+            className={inputClass}
+          />
+          <datalist id="payee-names">
+            {payeeNames.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
+        </label>
+        <label className={labelClass}>
+          O transferir a otra cuenta
+          <select
+            name="transferAccountId"
+            value={transferAccountId}
+            onChange={(event) => setTransferAccountId(event.target.value)}
+            className={inputClass}
+          >
+            <option value="">No es transferencia</option>
+            {transferTargets.map((account) => (
+              <option key={account.id} value={account.id}>{account.name}</option>
+            ))}
+          </select>
+        </label>
+        <label className={labelClass}>
+          Categoría
+          <select
+            name="categoryId"
+            value={categoryId}
+            onChange={(event) => setCategoryId(event.target.value)}
+            className={inputClass}
+          >
+            <option value="">Sin categoría</option>
+            {incomeCategoryId ? <option value={incomeCategoryId}>Ingreso: listo para asignar</option> : null}
+            <option value={SPLIT_CATEGORY} disabled={isTransfer}>Dividir en varias categorías…</option>
+            {categoryOptions}
+          </select>
+        </label>
+        <label className={labelClass}>
+          Salida
+          <input name="outflow" inputMode="decimal" value={outflow} onChange={(event) => setOutflow(event.target.value)} placeholder="0.00" className={`${inputClass} text-right`} />
+        </label>
+        <label className={labelClass}>
+          Entrada
+          <input name="inflow" inputMode="decimal" value={inflow} onChange={(event) => setInflow(event.target.value)} placeholder="0.00" className={`${inputClass} text-right`} />
+        </label>
+        <label className={labelClass}>
+          Nota
+          <input name="memo" defaultValue={initial?.memo ?? ""} className={inputClass} />
+        </label>
+      </div>
+
+      {isSplit ? (
+        <fieldset className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
+          <legend className="px-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">Partes de la transacción</legend>
+          {splits.map((split, index) => (
+            <div key={index} className="grid grid-cols-[1fr_7rem_auto] items-center gap-2">
+              <select
+                aria-label={`Categoría de la parte ${index + 1}`}
+                value={split.categoryId}
+                onChange={(event) => updateSplit(index, { categoryId: event.target.value })}
+                className={inputClass}
+              >
+                <option value="">Sin categoría</option>
+                {incomeCategoryId ? <option value={incomeCategoryId}>Ingreso: listo para asignar</option> : null}
+                {categoryOptions}
+              </select>
+              <input
+                aria-label={`Monto de la parte ${index + 1}`}
+                inputMode="decimal"
+                value={split.amount}
+                onChange={(event) => updateSplit(index, { amount: event.target.value })}
+                placeholder="0.00"
+                className={`${inputClass} text-right`}
+              />
+              <button
+                type="button"
+                className={linkButtonClass}
+                disabled={splits.length <= 2}
+                onClick={() => setSplits((current) => current.filter((_, position) => position !== index))}
+              >
+                Quitar
+              </button>
+            </div>
+          ))}
+          <div className="flex items-center justify-between text-xs">
+            <button type="button" className={linkButtonClass} onClick={() => setSplits((current) => [...current, { categoryId: "", amount: "" }])}>
+              Agregar parte
+            </button>
+            <span className={remaining === 0 ? "text-neutral-500" : "text-amber-700 dark:text-amber-400"}>
+              {remaining === 0 ? "Las partes suman el total" : `Falta repartir ${remaining.toFixed(2)}`}
+            </span>
+          </div>
+        </fieldset>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-4">
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" name="cleared" defaultChecked={initial?.isCleared ?? false} />
+          Ya aparece en el banco
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          Bandera
+          <select name="flagColor" defaultValue={initial?.flagColor ?? ""} className={`${inputClass} w-auto`}>
+            {FLAG_OPTIONS.map((flag) => (
+              <option key={flag.value} value={flag.value}>{flag.label}</option>
+            ))}
+          </select>
+        </label>
+        <button type="submit" disabled={isPending} className={`${primaryButtonClass} ml-auto`}>
+          {isPending ? "Guardando…" : initial ? "Guardar cambios" : "Agregar transacción"}
+        </button>
+      </div>
+    </>
+  );
+}

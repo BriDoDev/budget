@@ -23,6 +23,8 @@ export interface YnabPlan {
   months: YnabMonth[];
   transactions: YnabTransaction[];
   subtransactions: YnabSubtransaction[];
+  scheduled_transactions?: YnabScheduledTransaction[];
+  scheduled_subtransactions?: YnabScheduledSubtransaction[];
 }
 
 export interface YnabCurrencyFormat {
@@ -63,11 +65,24 @@ export interface YnabCategory {
   internal?: boolean;
   note: string | null;
   budgeted: number;
+  activity?: number;
+  balance?: number;
+  /** TB = target balance, TBD = target balance by date, MF = monthly funding, NEED = spending, DEBT = debt payment. */
+  goal_type?: "TB" | "TBD" | "MF" | "NEED" | "DEBT" | null;
+  goal_target?: number | null;
+  goal_target_date?: string | null;
+  goal_target_month?: string | null;
+  /** 0 none, 1 monthly, 2 weekly, 13 yearly (all multiplied by the frequency); 3-12 = every 2-11 months, 14 = every 2 years. */
+  goal_cadence?: number | null;
+  goal_cadence_frequency?: number | null;
+  goal_needs_whole_amount?: boolean | null;
+  goal_creation_month?: string | null;
   deleted: boolean;
 }
 
 export interface YnabMonth {
   month: string;
+  to_be_budgeted?: number;
   deleted: boolean;
   categories: YnabCategory[];
 }
@@ -93,6 +108,32 @@ export interface YnabTransaction {
 export interface YnabSubtransaction {
   id: string;
   transaction_id: string;
+  amount: number;
+  memo: string | null;
+  payee_id: string | null;
+  category_id: string | null;
+  transfer_account_id: string | null;
+  deleted: boolean;
+}
+
+export interface YnabScheduledTransaction {
+  id: string;
+  date_first: string;
+  date_next: string;
+  frequency: string;
+  amount: number;
+  memo: string | null;
+  flag_color: string | null;
+  account_id: string;
+  payee_id: string | null;
+  category_id: string | null;
+  transfer_account_id: string | null;
+  deleted: boolean;
+}
+
+export interface YnabScheduledSubtransaction {
+  id: string;
+  scheduled_transaction_id: string;
   amount: number;
   memo: string | null;
   payee_id: string | null;

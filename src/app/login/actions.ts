@@ -18,13 +18,16 @@ export async function requestMagicLink(_previous: MagicLinkState, formData: Form
     return { status: "error", message: "Escribe un correo válido." };
   }
 
-  // Only household members may sign in; the response does not reveal who is allowed.
+  const supabase = await createClient();
+  // Only household members and invited e-mails may sign in; the response does not reveal who is allowed.
   if (!isEmailAllowed(email, parseAllowedEmails(process.env.ALLOWED_EMAILS))) {
-    return { status: "sent", message: SENT_MESSAGE };
+    const { data: isInvited } = await supabase.rpc("is_email_invited", { candidate: email });
+    if (!isInvited) {
+      return { status: "sent", message: SENT_MESSAGE };
+    }
   }
 
   const origin = (await headers()).get("origin") ?? process.env.NEXT_PUBLIC_SITE_URL ?? "";
-  const supabase = await createClient();
   const { error } = await supabase.auth.signInWithOtp({
     email,
     options: { emailRedirectTo: `${origin}/auth/confirm` },

@@ -18,6 +18,11 @@ export async function GET(request: NextRequest) {
     failed = Boolean((await supabase.auth.exchangeCodeForSession(code)).error);
   }
 
+  if (!failed) {
+    // Joins the households that invited this e-mail before it had an account.
+    await supabase.rpc("accept_household_invites");
+  }
+
   const destination = request.nextUrl.clone();
   destination.search = "";
   destination.pathname = failed ? "/login" : next;

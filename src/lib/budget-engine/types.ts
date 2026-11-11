@@ -14,6 +14,8 @@ export type FundingSource = "cash" | "credit";
 export interface EngineCategory {
   id: string;
   kind: CategoryKind;
+  /** Credit account paid from this category. Only for `credit_card_payment`. */
+  linkedAccountId?: string | null;
 }
 
 /** Money assigned to a category in a month (milliunits). */
@@ -29,12 +31,25 @@ export interface ActivityLine {
   month: MonthKey;
   amount: number;
   source: FundingSource;
+  /** Account of the activity. Needed on credit lines to fund the right payment category. */
+  accountId?: string;
+}
+
+/**
+ * Transfer in or out of a credit account, expressed as its effect on the
+ * payment category: negative when paying the card, positive for a cash advance.
+ */
+export interface PaymentLine {
+  accountId: string;
+  month: MonthKey;
+  amount: number;
 }
 
 export interface EngineInput {
   categories: EngineCategory[];
   assignments: Assignment[];
   activity: ActivityLine[];
+  payments?: PaymentLine[];
   /** Extends the computed range up to this month even without data (e.g. the current month). */
   throughMonth?: MonthKey;
 }
@@ -54,6 +69,8 @@ export interface CategoryMonthResult {
   cashOverspent: number;
   /** Portion of a negative balance caused by credit spending (<= 0). Becomes unfunded card debt. */
   creditOverspent: number;
+  /** Credit activity covered by the category's own money; it moves to the card's payment category. */
+  fundedCredit: number;
 }
 
 export interface MonthResult {

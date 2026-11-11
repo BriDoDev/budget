@@ -10,6 +10,8 @@ export interface CurrencySettings {
   decimalDigits: number;
 }
 
+const AMOUNT_INPUT_PATTERN = /^-?(\d+\.?\d*|\.\d+)$/;
+
 export function milliunitsToUnits(amount: number): number {
   return amount / MILLIUNITS_PER_UNIT;
 }
@@ -29,4 +31,21 @@ export function formatMilliunits(
     minimumFractionDigits: currency.decimalDigits,
     maximumFractionDigits: currency.decimalDigits,
   }).format(milliunitsToUnits(amount));
+}
+
+/** Plain decimal text for form inputs, e.g. 1500500 → "1500.50". */
+export function milliunitsToInput(amount: number, decimalDigits = 2): string {
+  return milliunitsToUnits(amount).toFixed(decimalDigits);
+}
+
+/**
+ * Parses what a person types in an amount field ("1,500.50", "$ 80", "-12.5")
+ * into milliunits. Returns null when the text is not a number.
+ */
+export function parseAmountInput(raw: string | null | undefined): number | null {
+  const cleaned = (raw ?? "").replace(/[\s$,]/g, "");
+  if (!AMOUNT_INPUT_PATTERN.test(cleaned)) {
+    return null;
+  }
+  return unitsToMilliunits(Number(cleaned));
 }

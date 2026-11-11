@@ -39,6 +39,13 @@ export function monthRange(start: MonthKey, end: MonthKey): MonthKey[] {
   return months;
 }
 
+/** Whole months from `from` to `to`; negative when `to` is earlier. */
+export function monthsApart(from: MonthKey, to: MonthKey): number {
+  const [fromYear, fromMonth] = parseMonth(from);
+  const [toYear, toMonth] = parseMonth(to);
+  return (toYear - fromYear) * 12 + (toMonth - fromMonth);
+}
+
 export function currentMonthKey(now: Date = new Date()): MonthKey {
   return toMonthKey(
     `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`,

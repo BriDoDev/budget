@@ -113,3 +113,80 @@ describe("mapPlanExport", () => {
     expect(rows.subtransactions.map((row) => row.id)).toEqual(["s1"]);
   });
 });
+
+describe("mapPlanExport goals and scheduled transactions", () => {
+  const withExtras: YnabPlan = {
+    ...plan,
+    categories: [
+      ...plan.categories,
+      category({ id: "vacation", category_group_id: "bills", name: "Vacaciones", goal_type: "TBD", goal_target: 12_000_000, goal_target_date: "2027-07-15", goal_creation_month: "2026-08-01" }),
+      category({ id: "insurance", category_group_id: "bills", name: "Seguro", goal_type: "NEED", goal_target: 6_000_000, goal_cadence: 13, goal_cadence_frequency: 1, goal_target_date: "2027-03-01", goal_needs_whole_amount: false }),
+      category({ id: "coffee", category_group_id: "bills", name: "Café", goal_type: "NEED", goal_target: 300_000, goal_cadence: 2, goal_cadence_frequency: 1 }),
+    ],
+    scheduled_transactions: [
+      { id: "sch-1", date_first: "2026-01-05", date_next: "2026-12-05", frequency: "monthly", amount: -8_000_000, memo: null, flag_color: null, account_id: "checking", payee_id: "store", category_id: "rent", transfer_account_id: null, deleted: false },
+      { id: "sch-2", date_first: "2026-01-05", date_next: "2026-12-05", frequency: "monthly", amount: -1, memo: null, flag_color: null, account_id: "old", payee_id: null, category_id: null, transfer_account_id: null, deleted: false },
+    ],
+    scheduled_subtransactions: [
+      { id: "ssub-1", scheduled_transaction_id: "sch-1", amount: -8_000_000, memo: null, payee_id: null, category_id: "rent", transfer_account_id: null, deleted: false },
+      { id: "ssub-2", scheduled_transaction_id: "sch-2", amount: -1, memo: null, payee_id: null, category_id: null, transfer_account_id: null, deleted: false },
+    ],
+  };
+  const rows = mapPlanExport(withExtras, { householdId: "home", importedAt: "2026-11-11T00:00:00.000Z", serverKnowledge: 42 });
+  const goalOf = (id: string) => rows.categories.find((row) => row.id === id);
+
+  it("translates YNAB goal types, dates and cadences", () => {
+    expect(goalOf("vacation")).toMatchObject({ goal_type: "target_balance_by_date", goal_target: 12_000_000, goal_target_month: "2027-07-01", goal_created_month: "2026-08-01" });
+    expect(goalOf("insurance")).toMatchObject({ goal_type: "needed_spending", goal_cadence_months: 12, goal_needs_whole_amount: false });
+    expect(goalOf("coffee")).toMatchObject({ goal_type: "needed_spending", goal_target: 1_300_000, goal_cadence_months: 1, goal_target_month: null });
+    expect(goalOf("rent")).toMatchObject({ goal_type: null, goal_target: null });
+  });
+
+  it("imports scheduled transactions of live accounts with their splits", () => {
+    expect(rows.scheduledTransactions.map((row) => row.id)).toEqual(["sch-1"]);
+    expect(rows.scheduledSubtransactions.map((row) => row.id)).toEqual(["ssub-1"]);
+    expect(rows.budget.ynab_server_knowledge).toBe(42);
+  });
+});
+
+describe("mapPlanExport delta", () => {
+  const delta: YnabPlan = {
+    ...plan,
+    accounts: [],
+    payees: [{ id: "gone", name: "Gone", transfer_account_id: null, deleted: true }],
+    category_groups: [],
+    categories: [category({ id: "rent", category_group_id: "bills", name: "Renta nueva" })],
+    months: [{ month: "2026-02-01", deleted: false, categories: [category({ id: "rent", category_group_id: "bills", name: "Renta nueva", budgeted: 0 })] }],
+    transactions: [
+      transaction({ id: "t9", payee_id: "store", category_id: "rent" }),
+      transaction({ id: "t1", deleted: true }),
+    ],
+    subtransactions: [{ id: "s9", transaction_id: "t-existing", amount: -1_000, memo: null, payee_id: "gone", category_id: "rent", transfer_account_id: null, deleted: false }],
+  };
+  const rows = mapPlanExport(delta, {
+    householdId: "home",
+    importedAt: "2026-11-12T00:00:00.000Z",
+    known: {
+      accounts: [{ id: "checking", name: "Checking", type: "checking" }],
+      categoryGroups: [{ id: "bills", name: "Bills", is_internal: false }],
+      categories: [{ id: "rent", kind: "standard" }],
+      payeeIds: ["store", "gone"],
+      transactionIds: ["t1", "t-existing"],
+      scheduledTransactionIds: [],
+    },
+  });
+
+  it("resolves references against entities that are not part of the delta", () => {
+    expect(rows.categories).toHaveLength(1);
+    expect(rows.categories[0]).toMatchObject({ id: "rent", name: "Renta nueva", kind: "standard" });
+    expect(rows.categories[0]).not.toHaveProperty("sort_index");
+    expect(rows.transactions[0]).toMatchObject({ id: "t9", payee_id: "store", category_id: "rent" });
+    expect(rows.subtransactions[0]).toMatchObject({ id: "s9", transaction_id: "t-existing", payee_id: null });
+  });
+
+  it("keeps zeroed assignments and reports deletions", () => {
+    expect(rows.assignments).toEqual([{ budget_id: "plan-1", category_id: "rent", month: "2026-02-01", amount: 0 }]);
+    expect(rows.deleted.transactions).toEqual(["t1"]);
+    expect(rows.deleted.payees).toEqual(["gone"]);
+  });
+});

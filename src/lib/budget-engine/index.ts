@@ -1,4 +1,6 @@
-export { computeBudget, computeCategoryMonth } from "./engine";
-export { buildActivityLines, CREDIT_ACCOUNT_TYPES } from "./ledger";
+export { computeBudget, computeCategoryMonth, splitFundedCredit } from "./engine";
+export { computeGoalStatus } from "./goals";
+export { buildLedger, CREDIT_ACCOUNT_TYPES } from "./ledger";
 export type * from "./types";
-export type { LedgerAccount, LedgerSubtransaction, LedgerTransaction } from "./ledger";
+export type { Goal, GoalMonthValues, GoalStatus, GoalType } from "./goals";
+export type { Ledger, LedgerAccount, LedgerSubtransaction, LedgerTransaction } from "./ledger";

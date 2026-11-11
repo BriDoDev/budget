@@ -1,4 +1,6 @@
+import type { GoalType } from "../budget-engine/goals";
 import type { CategoryKind } from "../budget-engine/types";
+import type { Frequency } from "../schedule";
 
 /** Row shapes of the public schema (see supabase/migrations). Amounts are milliunits. */
 
@@ -21,6 +23,7 @@ export interface BudgetRow {
   currency_decimal_digits: number;
   imported_from: string | null;
   imported_at: string | null;
+  ynab_server_knowledge: number | null;
 }
 
 export interface AccountRow {
@@ -52,6 +55,12 @@ export interface CategoryRow {
   note: string | null;
   linked_account_id: string | null;
   sort_index: number;
+  goal_type: GoalType | null;
+  goal_target: number | null;
+  goal_target_month: string | null;
+  goal_cadence_months: number;
+  goal_needs_whole_amount: boolean;
+  goal_created_month: string | null;
 }
 
 export interface MonthAssignmentRow {
@@ -95,4 +104,36 @@ export interface SubtransactionRow {
   category_id: string | null;
   memo: string | null;
   transfer_account_id: string | null;
+}
+
+export interface ScheduledTransactionRow {
+  id: string;
+  budget_id: string;
+  account_id: string;
+  date_first: string;
+  date_next: string;
+  frequency: Frequency;
+  amount: number;
+  payee_id: string | null;
+  category_id: string | null;
+  memo: string | null;
+  flag_color: string | null;
+  transfer_account_id: string | null;
+}
+
+export interface ScheduledSubtransactionRow {
+  id: string;
+  budget_id: string;
+  scheduled_transaction_id: string;
+  amount: number;
+  payee_id: string | null;
+  category_id: string | null;
+  memo: string | null;
+  transfer_account_id: string | null;
+}
+
+export interface HouseholdInviteRow {
+  household_id: string;
+  email: string;
+  created_at: string;
 }
