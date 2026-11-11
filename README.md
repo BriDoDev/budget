@@ -1,36 +1,59 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ynab-dashboard
 
-## Getting Started
+Envelope budgeting app for a two-person household. Data is imported once from
+YNAB through its official API and then lives in our own Supabase database.
+The budgeting math is reimplemented from a reverse engineering pass of the YNAB
+web client: see [docs/ynab-internals.md](docs/ynab-internals.md).
 
-First, run the development server:
+## Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- Next.js 16 (App Router, Cache Components, `proxy.ts`), React 19, Tailwind CSS 4
+- Supabase: Postgres + row level security per household, magic-link auth
+- Vitest for the budget engine and importer mapping
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Layout
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Path | Purpose |
+|---|---|
+| `src/lib/budget-engine` | Pure budgeting math (carryover, cash/credit overspending, Ready to Assign) |
+| `src/lib/ynab` | Official YNAB API client and export → rows mapping |
+| `src/lib/budget-view.ts` | Builds the month screen from stored rows |
+| `src/lib/data` | Server-only data access through the user's session (RLS applies) |
+| `supabase/migrations` | Schema and RLS policies |
+| `scripts/import-ynab.ts` | Importer (uses the Supabase secret key) |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Setup
 
-## Learn More
+1. Create a Supabase project (or run `pnpm dlx supabase start` with Docker) and apply
+   `supabase/migrations/*.sql` (SQL editor or `pnpm dlx supabase db push`).
+2. In Supabase Auth → URL Configuration, set the Site URL and add
+   `http://localhost:3000/auth/confirm` (and your production URL) to the redirect list.
+3. `cp .env.example .env.local` and fill in the Supabase keys and `ALLOWED_EMAILS`
+   (both household members, owner first).
+4. `pnpm install && pnpm dev`, open http://localhost:3000 and have **each** member
+   request a magic link once so their user exists.
+5. Create a YNAB Personal Access Token (YNAB → Account Settings → Developer Settings),
+   put it in `YNAB_ACCESS_TOKEN` and run:
 
-To learn more about Next.js, take a look at the following resources:
+   ```bash
+   pnpm import:ynab
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+   The import is idempotent: YNAB ids are reused as primary keys, so it can be re-run.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Scripts
 
-## Deploy on Vercel
+| Command | Description |
+|---|---|
+| `pnpm dev` | Development server |
+| `pnpm test` | Unit tests |
+| `pnpm typecheck` | Route type generation + `tsc` |
+| `pnpm lint` | ESLint |
+| `pnpm build` | Production build |
+| `pnpm import:ynab` | Import a YNAB plan into the household |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Known gaps
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Credit card payment auto-funding, goals/targets, scheduled transactions and
+editing (assigning money, adding transactions) are not implemented yet. See the
+last section of `docs/ynab-internals.md`.
