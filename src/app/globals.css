@@ -1,40 +1,70 @@
 @import "tailwindcss";
 
+/*
+ * Design tokens. The theme is light only: one blue accent for actions and
+ * funded money, orange reserved for anything that needs attention.
+ */
 :root {
-  color-scheme: light dark;
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  color-scheme: light;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --ground: #f4f5f7;
+  --surface: #ffffff;
+  --subtle: #f9fafb;
+  --line: #e5e7eb;
+  --line-strong: #d1d5db;
+  --hairline: #f0f1f3;
+  --neutral-soft: #eef0f3;
+  --track: #d9dee5;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+  --ink: #111827;
+  --ink-soft: #374151;
+  --muted: #4b5563;
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
+  --accent: #1f5fbf;
+  --accent-strong: #17468f;
+  --accent-soft: #e9eff9;
 
-/* Chart series colors (validated categorical slots 1 and 2), stepped per color scheme. */
-:root {
-  --viz-series-1: #2a78d6;
+  --warn: #c2410c;
+  --warn-ink: #8a2e0b;
+  --warn-deep: #6b2408;
+  --warn-soft: #ffe8d6;
+  --warn-softer: #fff4ea;
+  --warn-line: #f5c9a6;
+
+  /* Chart series: a validated pair that stays distinguishable without color vision. */
+  --viz-series-1: #1f5fbf;
   --viz-series-2: #eb6834;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --viz-series-1: #3987e5;
-    --viz-series-2: #d95926;
-  }
+@theme inline {
+  --color-ground: var(--ground);
+  --color-surface: var(--surface);
+  --color-subtle: var(--subtle);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-hairline: var(--hairline);
+  --color-neutral-soft: var(--neutral-soft);
+  --color-track: var(--track);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-warn: var(--warn);
+  --color-warn-ink: var(--warn-ink);
+  --color-warn-deep: var(--warn-deep);
+  --color-warn-soft: var(--warn-soft);
+  --color-warn-softer: var(--warn-softer);
+  --color-warn-line: var(--warn-line);
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-display: var(--font-space-grotesk), var(--font-inter), system-ui, sans-serif;
+}
+
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.4;
 }

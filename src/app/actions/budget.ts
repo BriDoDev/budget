@@ -2,6 +2,7 @@
 
 import { refresh } from "next/cache";
 import { fail, readMonth, readUuid, succeed, type ActionState } from "@/lib/actions/form";
+import { getBudgetMonthView } from "@/lib/data/budgets";
 import { parseAmountInput } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
 
@@ -60,4 +61,40 @@ export async function moveMoney(previous: ActionState, formData: FormData): Prom
   }
   refresh();
   return succeed(previous, "Dinero movido.");
+}
+
+/** Assigns to every category what its goal still needs this month. */
+export async function fundGoals(previous: ActionState, formData: FormData): Promise<ActionState> {
+  const budgetId = readUuid(formData, "budgetId");
+  const month = readMonth(formData, "month");
+  if (!budgetId || !month) {
+    return fail(previous, "Faltan datos del presupuesto.");
+  }
+  const view = await getBudgetMonthView(budgetId, month);
+  if (!view) {
+    return fail(previous, "No se encontró el presupuesto.");
+  }
+
+  const updatedAt = new Date().toISOString();
+  const rows = view.groups
+    .flatMap((group) => group.categories)
+    .filter((category) => (category.goal?.underfunded ?? 0) > 0)
+    .map((category) => ({
+      budget_id: budgetId,
+      category_id: category.id,
+      month,
+      amount: category.assigned + (category.goal?.underfunded ?? 0),
+      updated_at: updatedAt,
+    }));
+  if (rows.length === 0) {
+    return succeed(previous, "Tus metas ya están cubiertas.");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("month_assignments").upsert(rows, { onConflict: "category_id,month" });
+  if (error) {
+    return fail(previous, "No se pudieron cubrir las metas.");
+  }
+  refresh();
+  return succeed(previous);
 }

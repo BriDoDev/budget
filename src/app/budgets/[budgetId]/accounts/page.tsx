@@ -5,7 +5,7 @@ import { Register } from "./register";
 export default function AllAccountsPage({ params, searchParams }: PageProps<"/budgets/[budgetId]/accounts">) {
   return (
     <main className={pageClass}>
-      <Suspense fallback={<p className="text-neutral-500">Cargando movimientos…</p>}>
+      <Suspense fallback={<p className="text-muted">Cargando movimientos…</p>}>
         <AllAccounts params={params} searchParams={searchParams} />
       </Suspense>
     </main>

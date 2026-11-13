@@ -1,5 +1,5 @@
 import { toMonthKey } from "../month";
-import type { ActivityLine, FundingSource, PaymentLine } from "./types";
+import type { ActivityLine, CardAdvanceLine, FundingSource, PaymentLine } from "./types";
 
 /** Account types whose spending is funded with credit instead of cash. */
 export const CREDIT_ACCOUNT_TYPES: ReadonlySet<string> = new Set(["creditCard", "lineOfCredit"]);
@@ -28,6 +28,12 @@ export interface LedgerSubtransaction {
 export interface Ledger {
   activity: ActivityLine[];
   payments: PaymentLine[];
+  cardAdvances: CardAdvanceLine[];
+}
+
+export interface LedgerOptions {
+  /** Ids of the "Ready to Assign" inflow categories. */
+  incomeCategoryIds?: ReadonlySet<string>;
 }
 
 /**
@@ -35,13 +41,17 @@ export interface Ledger {
  * `budget_activity` SQL function and must follow the same rules:
  * - Off-budget (tracking) accounts are ignored.
  * - Split transactions contribute their subtransactions instead of the parent.
- * - Uncategorized transfers on a credit account are card payments.
+ * - An uncategorized transfer into a credit account is a card payment; one out
+ *   of it is a cash advance.
+ * - Debt booked against the income category on a card (its starting balance)
+ *   is not income.
  * - Any other uncategorized line is skipped.
  */
 export function buildLedger(
   accounts: LedgerAccount[],
   transactions: LedgerTransaction[],
   subtransactions: LedgerSubtransaction[],
+  { incomeCategoryIds = new Set<string>() }: LedgerOptions = {},
 ): Ledger {
   const accountsById = new Map(accounts.map((account) => [account.id, account]));
   const subtransactionsByParent = new Map<string, LedgerSubtransaction[]>();
@@ -51,7 +61,7 @@ export function buildLedger(
     subtransactionsByParent.set(subtransaction.transactionId, siblings);
   }
 
-  const ledger: Ledger = { activity: [], payments: [] };
+  const ledger: Ledger = { activity: [], payments: [], cardAdvances: [] };
   for (const transaction of transactions) {
     const account = accountsById.get(transaction.accountId);
     if (!account?.onBudget) {
@@ -61,13 +71,15 @@ export function buildLedger(
     const source: FundingSource = isCredit ? "credit" : "cash";
     const month = toMonthKey(transaction.date);
 
-    if (isCredit && transaction.transferAccountId && !transaction.categoryId) {
-      ledger.payments.push({ accountId: account.id, month, amount: -transaction.amount });
+    if (isCredit && transaction.transferAccountId && !transaction.categoryId && transaction.amount !== 0) {
+      const target = transaction.amount > 0 ? ledger.payments : ledger.cardAdvances;
+      target.push({ accountId: account.id, month, amount: -transaction.amount });
     }
 
     const parts = subtransactionsByParent.get(transaction.id) ?? [transaction];
     for (const part of parts) {
-      if (part.categoryId) {
+      const isCardDebtAsIncome = isCredit && part.amount < 0 && incomeCategoryIds.has(part.categoryId ?? "");
+      if (part.categoryId && !isCardDebtAsIncome) {
         ledger.activity.push({ categoryId: part.categoryId, month, amount: part.amount, source, accountId: account.id });
       }
     }

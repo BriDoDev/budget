@@ -20,8 +20,8 @@ type Props = PageProps<"/budgets/[budgetId]/scheduled">;
 export default function ScheduledPage({ params }: Props) {
   return (
     <main className={pageClass}>
-      <h1 className="text-2xl font-semibold">Transacciones programadas</h1>
-      <Suspense fallback={<p className="text-neutral-500">Cargando programadas…</p>}>
+      <h1 className="font-display text-[28px] leading-tight font-semibold">Transacciones programadas</h1>
+      <Suspense fallback={<p className="text-muted">Cargando programadas…</p>}>
         <Scheduled params={params} />
       </Suspense>
     </main>
@@ -181,19 +181,19 @@ function ScheduledRow({
     item.scheduled_subtransactions.length > 0 ? "Dividida" : (categoryLabel(item.category) ?? (item.transfer_account_id ? "" : "Sin categoría"));
 
   return (
-    <tr className={`border-b border-neutral-100 align-top dark:border-neutral-900 ${isDue ? "bg-amber-50 dark:bg-amber-950/40" : ""}`}>
+    <tr className={`border-b border-hairline align-top ${isDue ? "bg-warn-softer" : ""}`}>
       <td className="py-2 pr-2 whitespace-nowrap tabular-nums">
         {item.date_next}
-        {isDue ? <span className="ml-2 text-xs text-amber-700 dark:text-amber-400">Ya toca</span> : null}
+        {isDue ? <span className="ml-2 text-xs text-warn-ink">Ya toca</span> : null}
       </td>
       <td className="py-2 pr-2">{FREQUENCY_LABELS[item.frequency]}</td>
       <td className="py-2 pr-2">{accountNames.get(item.account_id)}</td>
       <td className="py-2 pr-2">
         {payee}
-        {item.memo ? <span className="block text-xs text-neutral-500">{item.memo}</span> : null}
+        {item.memo ? <span className="block text-xs text-muted">{item.memo}</span> : null}
       </td>
       <td className="py-2 pr-2">{category}</td>
-      <td className={`py-2 pr-2 text-right ${item.amount > 0 ? "text-emerald-700 dark:text-emerald-400" : ""}`}>
+      <td className={`py-2 pr-2 text-right ${item.amount > 0 ? "text-accent-strong" : ""}`}>
         <Money amount={item.amount} currency={currency} />
       </td>
       <td className="py-2 text-right whitespace-nowrap">
@@ -208,7 +208,7 @@ function ScheduledRow({
         </form>
         <form action={deleteScheduledTransaction} className="inline">
           <input type="hidden" name="id" value={item.id} />
-          <SubmitButton className={`${linkButtonClass} !text-red-600 dark:!text-red-400`}>Eliminar</SubmitButton>
+          <SubmitButton className={`${linkButtonClass} !text-red-700`}>Eliminar</SubmitButton>
         </form>
       </td>
     </tr>

@@ -35,11 +35,15 @@ export interface ActivityLine {
   accountId?: string;
 }
 
-/**
- * Transfer in or out of a credit account, expressed as its effect on the
- * payment category: negative when paying the card, positive for a cash advance.
- */
+/** Payment into a credit account, expressed as its effect on the payment category (negative). */
 export interface PaymentLine {
+  accountId: string;
+  month: MonthKey;
+  amount: number;
+}
+
+/** Cash moved out of a credit account into the budget (positive). It becomes money to assign. */
+export interface CardAdvanceLine {
   accountId: string;
   month: MonthKey;
   amount: number;
@@ -50,6 +54,7 @@ export interface EngineInput {
   assignments: Assignment[];
   activity: ActivityLine[];
   payments?: PaymentLine[];
+  cardAdvances?: CardAdvanceLine[];
   /** Extends the computed range up to this month even without data (e.g. the current month). */
   throughMonth?: MonthKey;
 }
@@ -77,6 +82,8 @@ export interface MonthResult {
   month: MonthKey;
   /** Inflows categorized as Ready to Assign during the month. */
   income: number;
+  /** Cash taken from credit cards during the month; it adds to the money to assign. */
+  cardAdvances: number;
   assigned: number;
   activity: number;
   /** Total cash overspending of the month (<= 0). */

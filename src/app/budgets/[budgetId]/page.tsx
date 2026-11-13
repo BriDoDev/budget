@@ -1,95 +1,115 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
 import { Suspense } from "react";
-import { moveMoney, setAssignment } from "@/app/actions/budget";
+import { fundGoals, moveMoney, setAssignment } from "@/app/actions/budget";
 import { ActionForm, SubmitButton } from "@/components/action-form";
+import { Icon } from "@/components/icons";
 import { Money } from "@/components/money";
-import { inputClass, labelClass, linkButtonClass, mutedTextClass, pageClass, tableHeaderClass } from "@/components/ui";
+import {
+  cardClass,
+  eyebrowClass,
+  headingClass,
+  inputClass,
+  labelClass,
+  linkButtonClass,
+  mutedTextClass,
+  pageClass,
+  pillNeutralClass,
+  pillPositiveClass,
+  pillWarnClass,
+  secondaryButtonClass,
+  statValueClass,
+  tableHeaderClass,
+} from "@/components/ui";
 import type { BudgetMonthView, CategoryLine } from "@/lib/budget-view";
-import { groupLabel } from "@/lib/categories";
-import { getBudgetMonthView } from "@/lib/data/budgets";
-import { milliunitsToInput } from "@/lib/money";
+import { describeGoal, groupLabel } from "@/lib/categories";
+import { getBudgetMonthView, listCategoryMonthActivity, type CategoryActivityItem } from "@/lib/data/budgets";
+import { listAccounts, listCategories } from "@/lib/data/core";
+import { formatMonthTitle, formatMonthWord, formatShortDate } from "@/lib/dates";
+import { formatMilliunits, milliunitsToInput, type CurrencySettings } from "@/lib/money";
 import { currentMonthKey, toMonthKey, type MonthKey } from "@/lib/month";
 import { AssignInput } from "./assign-input";
 
 const MONTH_PARAM_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+const MAX_ATTENTION_ITEMS = 4;
 
-export default function BudgetPage({ params, searchParams }: PageProps<"/budgets/[budgetId]">) {
+type Props = PageProps<"/budgets/[budgetId]">;
+
+interface CategoryStatus {
+  /** Progress bar under the category name; null when there is nothing to show. */
+  bar: { percent: number; isWarning: boolean; label: string } | null;
+  caption: string;
+  isWarning: boolean;
+}
+
+interface AttentionItem {
+  categoryId: string;
+  text: string;
+}
+
+export default function BudgetPage({ params, searchParams }: Props) {
   return (
     <main className={pageClass}>
-      <Suspense fallback={<p className="text-neutral-500">Calculando el mes…</p>}>
+      <Suspense fallback={<p className={mutedTextClass}>Calculando el mes…</p>}>
         <BudgetMonth params={params} searchParams={searchParams} />
       </Suspense>
     </main>
   );
 }
 
-async function BudgetMonth({
-  params,
-  searchParams,
-}: Pick<PageProps<"/budgets/[budgetId]">, "params" | "searchParams">) {
+async function BudgetMonth({ params, searchParams }: Pick<Props, "params" | "searchParams">) {
   const { budgetId } = await params;
-  const { month } = await searchParams;
-  const monthKey = typeof month === "string" && MONTH_PARAM_PATTERN.test(month) ? toMonthKey(month) : currentMonthKey();
+  const query = await searchParams;
+  // The default month comes from the clock, so wait for the request before reading it.
+  await connection();
+  const monthKey =
+    typeof query.month === "string" && MONTH_PARAM_PATTERN.test(query.month) ? toMonthKey(query.month) : currentMonthKey();
 
   const view = await getBudgetMonthView(budgetId, monthKey);
   if (!view) {
     notFound();
   }
+  const accounts = await listAccounts(budgetId);
+  const cardBalances = new Map(accounts.map((account) => [account.id, account.balance]));
+  const accountNames = new Map(accounts.map((account) => [account.id, account.name]));
+
+  const statuses = new Map<string, CategoryStatus>();
+  for (const category of view.groups.flatMap((group) => group.categories)) {
+    statuses.set(category.id, describeStatus(category, view, cardBalances.get(category.linkedAccountId ?? "")));
+  }
+
+  const selectedId = typeof query.cat === "string" ? query.cat : "";
+  const selectedGroup = view.groups.find((group) => group.categories.some((category) => category.id === selectedId));
+  const selected = selectedGroup?.categories.find((category) => category.id === selectedId);
 
   return (
     <>
       <MonthHeader view={view} />
-      <MoveMoney view={view} />
-      <CategoryTable view={view} />
+      <Summary view={view} />
+      <div className="flex flex-wrap items-start gap-5">
+        <CategoryTable view={view} statuses={statuses} selectedId={selected?.id} />
+        {selected && selectedGroup ? (
+          <CategoryDetail
+            view={view}
+            category={selected}
+            groupName={groupLabel(selectedGroup.name)}
+            status={statuses.get(selected.id)}
+            accountNames={accountNames}
+          />
+        ) : (
+          <aside className={`${cardClass} ${mutedTextClass} hidden flex-[1_1_300px] lg:block`}>
+            Elige una categoría para ver su meta, de dónde viene su saldo y sus movimientos del mes.
+          </aside>
+        )}
+      </div>
     </>
   );
 }
 
 function MonthHeader({ view }: { view: BudgetMonthView }) {
-  const { summary, budget } = view;
-  const isNegative = summary.readyToAssign < 0;
-
-  return (
-    <section className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Presupuesto</h1>
-        <nav className="flex items-center gap-2 text-sm" aria-label="Mes">
-          <Link href={monthHref(budget.id, view.previousMonth)} aria-label="Mes anterior" className="rounded px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-800">
-            ←
-          </Link>
-          <span className="min-w-36 text-center font-medium">{formatMonthLabel(view.month)}</span>
-          <Link href={monthHref(budget.id, view.nextMonth)} aria-label="Mes siguiente" className="rounded px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-800">
-            →
-          </Link>
-        </nav>
-      </div>
-      <div
-        className={`flex flex-col gap-1 rounded-lg px-4 py-3 ${isNegative ? "bg-red-50 text-red-900 dark:bg-red-950 dark:text-red-100" : "bg-emerald-50 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100"}`}
-      >
-        <span className="text-sm">{isNegative ? "Asignaste de más" : "Listo para asignar"}</span>
-        <Money amount={summary.readyToAssign} currency={budget.currency} className="text-3xl font-semibold" />
-        <span className="text-xs opacity-80">
-          Ingresos del mes <Money amount={summary.income} currency={budget.currency} /> · Asignado{" "}
-          <Money amount={summary.assigned} currency={budget.currency} />
-          {summary.fundedInFuture > 0 ? (
-            <>
-              {" "}· Asignado a meses futuros <Money amount={summary.fundedInFuture} currency={budget.currency} />
-            </>
-          ) : null}
-        </span>
-      </div>
-      {view.underfunded > 0 ? (
-        <p className={mutedTextClass}>
-          A tus metas les faltan <Money amount={view.underfunded} currency={budget.currency} className="font-medium" /> este mes.
-        </p>
-      ) : null}
-    </section>
-  );
-}
-
-function MoveMoney({ view }: { view: BudgetMonthView }) {
-  const options = view.groups.map((group) => (
+  const { budget } = view;
+  const categoryOptions = view.groups.map((group) => (
     <optgroup key={group.id} label={groupLabel(group.name)}>
       {group.categories.map((category) => (
         <option key={category.id} value={category.id}>{category.name}</option>
@@ -98,153 +118,451 @@ function MoveMoney({ view }: { view: BudgetMonthView }) {
   ));
 
   return (
-    <details className="rounded-lg border border-neutral-200 px-4 py-3 dark:border-neutral-800">
-      <summary className="cursor-pointer text-sm font-medium">Mover dinero entre categorías</summary>
-      <ActionForm action={moveMoney} className="mt-3 flex flex-col gap-3">
-        <input type="hidden" name="budgetId" value={view.budget.id} />
-        <input type="hidden" name="month" value={view.month} />
-        <div className="grid gap-3 sm:grid-cols-[1fr_1fr_8rem_auto] sm:items-end">
-          <label className={labelClass}>
-            De
-            <select name="from" defaultValue="" className={inputClass}>
-              <option value="">Listo para asignar</option>
-              {options}
-            </select>
-          </label>
-          <label className={labelClass}>
-            A
-            <select name="to" defaultValue={view.groups[0]?.categories[0]?.id ?? ""} className={inputClass}>
-              <option value="">Listo para asignar</option>
-              {options}
-            </select>
-          </label>
-          <label className={labelClass}>
-            Monto
-            <input name="amount" inputMode="decimal" required placeholder="0.00" className={inputClass} />
-          </label>
-          <SubmitButton pendingLabel="Moviendo…">Mover</SubmitButton>
-        </div>
-      </ActionForm>
-    </details>
+    <header className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center gap-4">
+        <h1 className={headingClass}>Presupuesto</h1>
+        <nav aria-label="Mes" className="flex items-center gap-1 rounded-[10px] border border-line bg-surface px-1">
+          <Link href={budgetHref(budget.id, view.previousMonth)} aria-label="Mes anterior" className="flex size-11 items-center justify-center rounded-lg text-ink-soft hover:bg-subtle">
+            <Icon name="chevronLeft" />
+          </Link>
+          <span className="min-w-36 text-center font-semibold">{formatMonthTitle(view.month)}</span>
+          <Link href={budgetHref(budget.id, view.nextMonth)} aria-label="Mes siguiente" className="flex size-11 items-center justify-center rounded-lg text-ink-soft hover:bg-subtle">
+            <Icon name="chevronRight" />
+          </Link>
+        </nav>
+      </div>
+
+      <div className="flex flex-wrap items-start gap-2.5">
+        <details className="relative">
+          <summary className={`${secondaryButtonClass} list-none`}>
+            <Icon name="swap" />
+            Mover dinero
+          </summary>
+          <div className="absolute right-0 z-10 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-[14px] border border-line bg-surface p-4 shadow-lg">
+            <ActionForm action={moveMoney} className="flex flex-col gap-3">
+              <input type="hidden" name="budgetId" value={budget.id} />
+              <input type="hidden" name="month" value={view.month} />
+              <label className={labelClass}>
+                De
+                <select name="from" defaultValue="" className={inputClass}>
+                  <option value="">Listo para asignar</option>
+                  {categoryOptions}
+                </select>
+              </label>
+              <label className={labelClass}>
+                A
+                <select name="to" defaultValue={view.groups[0]?.categories[0]?.id ?? ""} className={inputClass}>
+                  <option value="">Listo para asignar</option>
+                  {categoryOptions}
+                </select>
+              </label>
+              <label className={labelClass}>
+                Monto
+                <input name="amount" inputMode="decimal" required placeholder="0.00" className={`${inputClass} text-right`} />
+              </label>
+              <SubmitButton pendingLabel="Moviendo…">Mover</SubmitButton>
+            </ActionForm>
+          </div>
+        </details>
+
+        {view.underfunded > 0 ? (
+          <ActionForm action={fundGoals} className="flex flex-col items-end gap-1">
+            <input type="hidden" name="budgetId" value={budget.id} />
+            <input type="hidden" name="month" value={view.month} />
+            <SubmitButton pendingLabel="Asignando…">
+              Cubrir metas · {formatMilliunits(view.underfunded, budget.currency)}
+            </SubmitButton>
+          </ActionForm>
+        ) : null}
+      </div>
+    </header>
   );
 }
 
-function CategoryTable({ view }: { view: BudgetMonthView }) {
+function Summary({ view }: { view: BudgetMonthView }) {
+  const { summary } = view;
+  const { currency } = view.budget;
+  const categories = view.groups.flatMap((group) => group.categories);
+  const spending = categories.filter((category) => category.kind === "standard" && category.activity < 0);
+  const spent = spending.reduce((sum, category) => sum - category.activity, 0);
+  const attention = listAttention(categories, currency);
+  const attentionCategories = new Set(attention.map((item) => item.categoryId)).size;
+  const isOverAssigned = summary.readyToAssign < 0;
+  const monthWord = formatMonthWord(view.month);
+
+  return (
+    <section aria-label="Resumen del mes" className="flex flex-wrap gap-4">
+      <div className={`flex flex-[1.3_1_240px] flex-col gap-1 rounded-[14px] px-5 py-4 ${isOverAssigned ? "bg-warn text-white" : "bg-accent text-white"}`}>
+        <span className="text-[13px] font-medium">{isOverAssigned ? "Asignaste de más" : "Listo para asignar"}</span>
+        <Money amount={summary.readyToAssign} currency={currency} className="font-display text-4xl leading-tight font-semibold" />
+        <span className="text-[13px]">
+          Entraron <Money amount={summary.income} currency={currency} /> este mes
+        </span>
+      </div>
+
+      <div className="hidden flex-[1_1_200px] flex-col gap-1 rounded-[14px] border border-line bg-surface px-5 py-4 sm:flex">
+        <span className="text-[13px] font-medium text-muted">Asignado en {monthWord}</span>
+        <Money amount={summary.assigned} currency={currency} className={statValueClass} />
+        <span className="text-[13px] text-muted">
+          {summary.fundedInFuture > 0 ? (
+            <>
+              y <Money amount={summary.fundedInFuture} currency={currency} /> ya en meses futuros
+            </>
+          ) : (
+            "nada asignado a meses futuros"
+          )}
+        </span>
+      </div>
+
+      <div className="hidden flex-[1_1_200px] flex-col gap-1 rounded-[14px] border border-line bg-surface px-5 py-4 sm:flex">
+        <span className="text-[13px] font-medium text-muted">Gastado en {monthWord}</span>
+        <Money amount={spent} currency={currency} className={statValueClass} />
+        <span className="text-[13px] text-muted">
+          {spending.length === 1 ? "en 1 categoría" : `en ${spending.length} categorías`}
+        </span>
+      </div>
+
+      {attention.length > 0 ? (
+        <div className="flex flex-[1.3_1_240px] flex-col gap-1.5 rounded-[14px] border border-warn-line bg-warn-softer px-5 py-4 text-warn-deep">
+          <span className="flex items-center gap-2 text-[13px] font-semibold">
+            <Icon name="alert" />
+            {attentionCategories === 1 ? "1 categoría necesita atención" : `${attentionCategories} categorías necesitan atención`}
+          </span>
+          {attention.slice(0, MAX_ATTENTION_ITEMS).map((item) => (
+            <Link key={item.categoryId + item.text} href={`${budgetHref(view.budget.id, view.month, item.categoryId)}#detalle`} className="underline underline-offset-2">
+              {item.text}
+            </Link>
+          ))}
+          {attention.length > MAX_ATTENTION_ITEMS ? <span>y {attention.length - MAX_ATTENTION_ITEMS} más</span> : null}
+        </div>
+      ) : (
+        <div className="flex flex-[1.3_1_240px] flex-col justify-center gap-1 rounded-[14px] border border-line bg-surface px-5 py-4">
+          <span className="flex items-center gap-2 text-[13px] font-semibold text-accent-strong">
+            <Icon name="check" />
+            Todo en orden
+          </span>
+          <span className="text-[13px] text-muted">Ninguna categoría se pasó y las metas del mes están cubiertas.</span>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function CategoryTable({
+  view,
+  statuses,
+  selectedId,
+}: {
+  view: BudgetMonthView;
+  statuses: Map<string, CategoryStatus>;
+  selectedId: string | undefined;
+}) {
   const { currency } = view.budget;
 
   if (view.groups.length === 0) {
     return (
-      <p className={mutedTextClass}>
+      <p className={`${cardClass} ${mutedTextClass} flex-[999_1_560px]`}>
         Este presupuesto aún no tiene categorías.{" "}
-        <Link href={`/budgets/${view.budget.id}/categories`} className="underline underline-offset-4">Crea la primera</Link>.
+        <Link href={`/budgets/${view.budget.id}/categories`} className="text-accent underline underline-offset-4">
+          Crea la primera
+        </Link>
+        .
       </p>
     );
   }
 
   return (
-    <table className="w-full border-collapse text-sm">
-      <thead>
-        <tr className={tableHeaderClass}>
-          <th className="py-2 font-medium">Categoría</th>
-          <th className="py-2 text-right font-medium">Asignado</th>
-          <th className="py-2 text-right font-medium">Actividad</th>
-          <th className="py-2 pr-2 text-right font-medium">Disponible</th>
-        </tr>
-      </thead>
-      {view.groups.map((group) => (
-        <tbody key={group.id}>
-          <tr className="bg-neutral-50 font-medium dark:bg-neutral-900">
-            <td className="px-2 py-2">{groupLabel(group.name)}</td>
-            <td className="px-1.5 py-2 text-right"><Money amount={group.assigned} currency={currency} /></td>
-            <td className="py-2 text-right"><Money amount={group.activity} currency={currency} /></td>
-            <td className="px-2 py-2 text-right"><Money amount={group.available} currency={currency} /></td>
+    <section aria-label="Categorías" className="min-w-0 flex-[999_1_560px] overflow-hidden rounded-[14px] border border-line bg-surface">
+      <table className="w-full border-collapse text-sm">
+        <thead>
+          <tr className={tableHeaderClass}>
+            <th className="px-4 py-3 font-semibold">Categoría</th>
+            <th className="hidden px-2 py-3 text-right font-semibold sm:table-cell">Asignado</th>
+            <th className="hidden px-2 py-3 text-right font-semibold sm:table-cell">Gastado</th>
+            <th className="px-4 py-3 text-right font-semibold">Disponible</th>
           </tr>
-          {group.categories.map((category) => (
-            <tr key={category.id} className="border-b border-neutral-100 align-top dark:border-neutral-900">
-              <td className="px-2 py-2 pl-4">
-                <span>{category.name}</span>
-                <GoalNote view={view} category={category} />
-              </td>
-              <td className="py-1.5 text-right">
-                <AssignInput
-                  budgetId={view.budget.id}
-                  categoryId={category.id}
-                  categoryName={category.name}
-                  month={view.month}
-                  assigned={category.assigned}
-                  decimalDigits={currency.decimalDigits}
-                />
-              </td>
-              <td className="py-2 text-right"><Money amount={category.activity} currency={currency} /></td>
-              <td className="px-2 py-2 text-right">
-                <span className={`rounded-full px-2 py-0.5 ${availableTone(category)}`} title={availableTitle(category)}>
-                  <Money amount={category.available} currency={currency} />
-                </span>
-              </td>
+        </thead>
+        {view.groups.map((group) => (
+          <tbody key={group.id}>
+            <tr className={`border-t border-line bg-subtle ${eyebrowClass}`}>
+              <th scope="rowgroup" className="px-4 py-2 text-left font-semibold">{groupLabel(group.name)}</th>
+              <td className="hidden px-2 py-2 text-right sm:table-cell"><Money amount={group.assigned} currency={currency} /></td>
+              <td className="hidden px-2 py-2 text-right sm:table-cell"><Money amount={group.activity} currency={currency} /></td>
+              <td className="px-4 py-2 text-right"><Money amount={group.available} currency={currency} /></td>
             </tr>
-          ))}
-        </tbody>
-      ))}
-    </table>
+            {group.categories.map((category) => {
+              const status = statuses.get(category.id);
+              const isSelected = category.id === selectedId;
+              return (
+                <tr key={category.id} className={`border-t border-hairline ${isSelected ? "bg-accent-soft/60" : ""}`}>
+                  <td className="px-4 py-2.5">
+                    <Link
+                      href={`${budgetHref(view.budget.id, view.month, category.id)}#detalle`}
+                      aria-current={isSelected ? "true" : undefined}
+                      className={`hover:underline ${isSelected ? "font-semibold" : "font-medium"}`}
+                    >
+                      {category.name}
+                    </Link>
+                    {status?.bar ? <ProgressBar bar={status.bar} /> : null}
+                    {status?.caption ? (
+                      <span className={`mt-1 block text-xs ${status.isWarning ? "text-warn-ink" : "text-muted"}`}>{status.caption}</span>
+                    ) : null}
+                  </td>
+                  <td className="hidden px-2 py-2 sm:table-cell">
+                    <AssignInput
+                      budgetId={view.budget.id}
+                      categoryId={category.id}
+                      categoryName={category.name}
+                      month={view.month}
+                      assigned={category.assigned}
+                      decimalDigits={currency.decimalDigits}
+                      isHighlighted={isSelected}
+                    />
+                  </td>
+                  <td className="hidden px-2 py-2.5 text-right sm:table-cell"><Money amount={category.activity} currency={currency} /></td>
+                  <td className="px-4 py-2.5 text-right"><AvailablePill category={category} currency={currency} /></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        ))}
+      </table>
+    </section>
   );
 }
 
-/** Goal progress under the category name, with a one-click way to assign what is missing. */
-function GoalNote({ view, category }: { view: BudgetMonthView; category: CategoryLine }) {
-  const { goal } = category;
-  if (!goal) {
-    return null;
-  }
-  const { currency } = view.budget;
+async function CategoryDetail({
+  view,
+  category,
+  groupName,
+  status,
+  accountNames,
+}: {
+  view: BudgetMonthView;
+  category: CategoryLine;
+  groupName: string;
+  status: CategoryStatus | undefined;
+  accountNames: Map<string, string>;
+}) {
+  const { budget } = view;
+  const { currency } = budget;
+  const [activity, rows] = await Promise.all([
+    listCategoryMonthActivity(budget.id, category.id, view.month, view.nextMonth),
+    listCategories(budget.id),
+  ]);
+  const row = rows.find((candidate) => candidate.id === category.id);
+  const goalText = row ? describeGoal(row, currency) : null;
+  const missing = category.goal?.underfunded ?? 0;
 
-  if (goal.underfunded <= 0) {
-    return <span className="block text-xs text-neutral-500">Meta al {goal.percentageComplete}%</span>;
+  return (
+    <aside id="detalle" aria-label={`Detalle de ${category.name}`} className={`${cardClass} flex flex-[1_1_300px] scroll-mt-4 flex-col gap-4`}>
+      <div className="flex flex-col gap-0.5">
+        <span className={eyebrowClass}>{groupName}</span>
+        <h2 className="font-display text-[22px] font-semibold">{category.name}</h2>
+        {status?.caption ? <span className={`text-sm ${status.isWarning ? "text-warn-ink" : "text-muted"}`}>{status.caption}</span> : null}
+      </div>
+
+      {category.goal && goalText ? (
+        <div className={`flex flex-col gap-2 rounded-[10px] p-3.5 ${missing > 0 ? "bg-warn-softer text-warn-deep" : "bg-accent-soft text-accent-strong"}`}>
+          <span className="font-semibold">Meta: {goalText}</span>
+          <ProgressBar
+            bar={{ percent: category.goal.percentageComplete, isWarning: missing > 0, label: `Meta al ${category.goal.percentageComplete} por ciento` }}
+            isWide
+          />
+          {missing > 0 ? (
+            <ActionForm action={setAssignment} className="flex flex-col gap-2">
+              <input type="hidden" name="budgetId" value={budget.id} />
+              <input type="hidden" name="categoryId" value={category.id} />
+              <input type="hidden" name="month" value={view.month} />
+              <input type="hidden" name="amount" value={milliunitsToInput(category.assigned + missing, 3)} />
+              <span className="text-[13px]">
+                Faltan <Money amount={missing} currency={currency} /> este mes.
+              </span>
+              <SubmitButton pendingLabel="Asignando…">Asignar {formatMilliunits(missing, currency)}</SubmitButton>
+            </ActionForm>
+          ) : (
+            <span className="text-[13px]">Cubierta este mes.</span>
+          )}
+        </div>
+      ) : (
+        <Link href={`/budgets/${budget.id}/categories`} className={linkButtonClass}>
+          Ponerle una meta
+        </Link>
+      )}
+
+      <dl className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2.5">
+        <dt className="text-muted">Venía del mes pasado</dt>
+        <dd className="text-right"><Money amount={category.carryover} currency={currency} /></dd>
+        <dt className="text-muted">Asignado este mes</dt>
+        <dd className="justify-self-end">
+          <AssignInput
+            budgetId={budget.id}
+            categoryId={category.id}
+            categoryName={`${category.name} (detalle)`}
+            month={view.month}
+            assigned={category.assigned}
+            decimalDigits={currency.decimalDigits}
+          />
+        </dd>
+        <dt className="text-muted">{category.kind === "credit_card_payment" ? "Movimiento del mes" : "Gastado"}</dt>
+        <dd className="text-right"><Money amount={category.activity} currency={currency} /></dd>
+        <dt className="border-t border-line pt-2.5 font-semibold">Disponible</dt>
+        <dd className="border-t border-line pt-2.5 text-right font-semibold"><Money amount={category.available} currency={currency} /></dd>
+      </dl>
+
+      {category.kind === "standard" ? (
+        <div className="flex flex-col gap-2">
+          <span className={eyebrowClass}>Movimientos del mes</span>
+          {activity.length === 0 ? (
+            <span className={mutedTextClass}>Sin movimientos directos este mes.</span>
+          ) : (
+            activity.map((item) => <ActivityLink key={item.id} item={item} budgetId={budget.id} accountNames={accountNames} currency={currency} />)
+          )}
+        </div>
+      ) : null}
+
+      {category.note ? (
+        <div className="flex flex-col gap-1">
+          <span className={eyebrowClass}>Nota</span>
+          <p className="text-sm">{category.note}</p>
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap justify-between gap-3 border-t border-line pt-3">
+        <Link href={`/budgets/${budget.id}/categories`} className={linkButtonClass}>Editar categoría</Link>
+        <Link href={budgetHref(budget.id, view.month)} className={linkButtonClass}>Cerrar detalle</Link>
+      </div>
+    </aside>
+  );
+}
+
+function ActivityLink({
+  item,
+  budgetId,
+  accountNames,
+  currency,
+}: {
+  item: CategoryActivityItem;
+  budgetId: string;
+  accountNames: Map<string, string>;
+  currency: CurrencySettings;
+}) {
+  return (
+    <Link
+      href={`/budgets/${budgetId}/accounts/${item.account_id}`}
+      className="flex min-h-11 items-center justify-between gap-3 rounded-[10px] border border-line px-3 py-1.5 hover:bg-subtle"
+    >
+      <span className="flex min-w-0 flex-col">
+        <span className="truncate font-medium">{item.payee?.name ?? "Sin beneficiario"}</span>
+        <span className="text-xs text-muted">
+          {formatShortDate(item.date)} · {accountNames.get(item.account_id) ?? "Cuenta"}
+        </span>
+      </span>
+      <Money amount={item.amount} currency={currency} />
+    </Link>
+  );
+}
+
+function ProgressBar({ bar, isWide = false }: { bar: NonNullable<CategoryStatus["bar"]>; isWide?: boolean }) {
+  return (
+    <span role="img" aria-label={bar.label} className={`mt-1.5 block h-1.5 rounded-full bg-track ${isWide ? "" : "max-w-[260px]"}`}>
+      <span
+        className={`block h-full rounded-full ${bar.isWarning ? "bg-warn" : "bg-accent"}`}
+        style={{ width: `${Math.min(100, Math.max(0, bar.percent))}%` }}
+      />
+    </span>
+  );
+}
+
+/** Blue when there is money left, orange with an icon when overspent, gray at zero. */
+function AvailablePill({ category, currency }: { category: CategoryLine; currency: CurrencySettings }) {
+  if (category.cashOverspent < 0 || category.creditOverspent < 0) {
+    return (
+      <span className={pillWarnClass}>
+        <Icon name="alert" size={14} strokeWidth={2} />
+        <Money amount={category.available} currency={currency} />
+      </span>
+    );
   }
   return (
-    <ActionForm action={setAssignment} className="flex flex-wrap items-center gap-x-2 text-xs text-amber-700 dark:text-amber-400">
-      <input type="hidden" name="budgetId" value={view.budget.id} />
-      <input type="hidden" name="categoryId" value={category.id} />
-      <input type="hidden" name="month" value={view.month} />
-      <input type="hidden" name="amount" value={milliunitsToInput(category.assigned + goal.underfunded, 3)} />
-      <span>
-        Faltan <Money amount={goal.underfunded} currency={currency} /> para la meta
-      </span>
-      <SubmitButton className={`${linkButtonClass} !text-xs`} pendingLabel="Asignando…">Asignar</SubmitButton>
-    </ActionForm>
+    <span className={category.available > 0 ? pillPositiveClass : pillNeutralClass}>
+      <Money amount={category.available} currency={currency} />
+    </span>
   );
 }
 
-/** Red for cash overspending, amber for credit overspending, green when funded. */
-function availableTone(category: CategoryLine): string {
+/** Explains in a sentence where a category stands this month. */
+function describeStatus(category: CategoryLine, view: BudgetMonthView, cardBalance: number | undefined): CategoryStatus {
+  const money = (amount: number) => formatMilliunits(amount, view.budget.currency);
+
+  if (category.kind === "credit_card_payment") {
+    const debt = Math.max(0, -(cardBalance ?? 0));
+    const missing = Math.max(0, debt - category.available);
+    const caption =
+      debt === 0
+        ? "Sin deuda en la tarjeta"
+        : missing > 0
+          ? `Debes ${money(debt)} · faltan ${money(missing)} por apartar`
+          : `Debes ${money(debt)} · ya está apartado`;
+    return { bar: null, caption, isWarning: category.cashOverspent < 0 };
+  }
+
+  const funded = category.carryover + category.assigned;
+  const spent = -category.activity;
+  const spentOfFunded = `Gastaste ${money(spent)} de ${money(funded)}`;
+
   if (category.cashOverspent < 0) {
-    return "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200";
+    return {
+      bar: { percent: 100, isWarning: true, label: "Gastado más de lo disponible" },
+      caption: `${spentOfFunded} · se descuenta en ${formatMonthWord(view.nextMonth)}`,
+      isWarning: true,
+    };
   }
   if (category.creditOverspent < 0) {
-    return "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200";
+    return {
+      bar: { percent: 100, isWarning: true, label: "Gastado más de lo disponible" },
+      caption: `${spentOfFunded} · queda como deuda de la tarjeta`,
+      isWarning: true,
+    };
   }
-  if (category.available > 0) {
-    return "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200";
+  if (category.goal && category.goal.underfunded > 0) {
+    return {
+      bar: { percent: category.goal.percentageComplete, isWarning: true, label: `Meta al ${category.goal.percentageComplete} por ciento` },
+      caption: `Faltan ${money(category.goal.underfunded)} para la meta`,
+      isWarning: true,
+    };
   }
-  return "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300";
+  if (funded > 0 && spent > 0) {
+    const percent = Math.round((spent / funded) * 100);
+    return { bar: { percent, isWarning: false, label: `Gastado ${percent} por ciento de lo disponible` }, caption: spentOfFunded, isWarning: false };
+  }
+  if (category.goal) {
+    const percent = category.goal.percentageComplete;
+    return { bar: { percent, isWarning: false, label: `Meta al ${percent} por ciento` }, caption: `Meta al ${percent}%`, isWarning: false };
+  }
+  return { bar: null, caption: "", isWarning: false };
 }
 
-function availableTitle(category: CategoryLine): string | undefined {
-  if (category.cashOverspent < 0) {
-    return "Gastaste de más en efectivo. Se descontará de lo listo para asignar el próximo mes.";
+function listAttention(categories: CategoryLine[], currency: CurrencySettings): AttentionItem[] {
+  const money = (amount: number) => formatMilliunits(amount, currency);
+  const items: AttentionItem[] = [];
+  for (const category of categories) {
+    if (category.cashOverspent < 0) {
+      items.push({ categoryId: category.id, text: `${category.name} gastó ${money(-category.cashOverspent)} de más` });
+    } else if (category.creditOverspent < 0) {
+      items.push({ categoryId: category.id, text: `${category.name} gastó ${money(-category.creditOverspent)} de más con tarjeta` });
+    }
+    if (category.goal && category.goal.underfunded > 0) {
+      items.push({ categoryId: category.id, text: `A ${category.name} le faltan ${money(category.goal.underfunded)} para su meta` });
+    }
   }
-  if (category.creditOverspent < 0) {
-    return "Gastaste de más con tarjeta. Queda como deuda de la tarjeta.";
-  }
-  return undefined;
+  return items;
 }
 
-function monthHref(budgetId: string, month: MonthKey): string {
-  return `/budgets/${budgetId}?month=${month.slice(0, 7)}`;
-}
-
-function formatMonthLabel(month: MonthKey): string {
-  const label = new Intl.DateTimeFormat("es-MX", { month: "long", year: "numeric", timeZone: "UTC" }).format(
-    new Date(`${month}T00:00:00Z`),
-  );
-  return label.charAt(0).toUpperCase() + label.slice(1);
+function budgetHref(budgetId: string, month: MonthKey, categoryId?: string): string {
+  const query = new URLSearchParams({ month: month.slice(0, 7) });
+  if (categoryId) {
+    query.set("cat", categoryId);
+  }
+  return `/budgets/${budgetId}?${query}`;
 }

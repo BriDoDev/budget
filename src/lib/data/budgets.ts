@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { buildBudgetMonthView, type BudgetMonthView } from "../budget-view";
 import type { MonthAssignmentRow } from "../db/types";
 import type { MonthKey } from "../month";
@@ -41,7 +42,8 @@ export async function listAssignments(budgetId: string): Promise<AssignmentSlice
   );
 }
 
-export async function getBudgetMonthView(budgetId: string, month: MonthKey): Promise<BudgetMonthView | null> {
+/** Cached per request: the sidebar and the month page ask for the same view. */
+export const getBudgetMonthView = cache(async (budgetId: string, month: MonthKey): Promise<BudgetMonthView | null> => {
   const budget = await getBudget(budgetId);
   if (!budget) {
     return null;
@@ -53,4 +55,52 @@ export async function getBudgetMonthView(budgetId: string, month: MonthKey): Pro
     fetchActivity(budgetId),
   ]);
   return buildBudgetMonthView({ budget, groups, categories, assignments, activity }, month);
+});
+
+export interface CategoryActivityItem {
+  id: string;
+  date: string;
+  amount: number;
+  account_id: string;
+  payee: { name: string } | null;
+}
+
+/** Latest transactions of a category within a month (splits are not included). */
+export async function listCategoryMonthActivity(
+  budgetId: string,
+  categoryId: string,
+  month: MonthKey,
+  nextMonth: MonthKey,
+  limit = 5,
+): Promise<CategoryActivityItem[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("id, date, amount, account_id, payee:payees(name)")
+    .eq("budget_id", budgetId)
+    .eq("category_id", categoryId)
+    .gte("date", month)
+    .lt("date", nextMonth)
+    .order("date", { ascending: false })
+    .order("id")
+    .limit(limit)
+    .overrideTypes<CategoryActivityItem[], { merge: false }>();
+  if (error) {
+    throw new Error(`Could not load category activity: ${error.message}`);
+  }
+  return data ?? [];
+}
+
+/** Scheduled transactions whose next date has arrived. */
+export async function countDueScheduled(budgetId: string, today: string): Promise<number> {
+  const supabase = await createClient();
+  const { count, error } = await supabase
+    .from("scheduled_transactions")
+    .select("id", { count: "exact", head: true })
+    .eq("budget_id", budgetId)
+    .lte("date_next", today);
+  if (error) {
+    throw new Error(`Could not count scheduled transactions: ${error.message}`);
+  }
+  return count ?? 0;
 }

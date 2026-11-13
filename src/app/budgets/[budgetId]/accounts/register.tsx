@@ -3,22 +3,27 @@ import { notFound } from "next/navigation";
 import { setAccountClosed } from "@/app/actions/accounts";
 import { approveTransaction, deleteTransaction, reconcileAccount, setCleared } from "@/app/actions/transactions";
 import { ActionForm, SubmitButton } from "@/components/action-form";
+import { Icon } from "@/components/icons";
 import { Money } from "@/components/money";
 import {
-  cardClass,
+  eyebrowClass,
+  headingClass,
   inputClass,
   labelClass,
   linkButtonClass,
   mutedTextClass,
+  pillWarnClass,
+  primaryButtonClass,
   secondaryButtonClass,
   tableHeaderClass,
 } from "@/components/ui";
 import { accountTypeLabel } from "@/lib/accounts";
-import { groupLabel } from "@/lib/categories";
 import { todayIso } from "@/lib/actions/form";
+import { groupLabel } from "@/lib/categories";
 import { getBudget, listAccounts, listCategories, listCategoryGroups, type AccountWithBalance } from "@/lib/data/core";
 import {
   categoryLabel,
+  countTransactions,
   getTransaction,
   listPayeeNames,
   listTransactions,
@@ -26,17 +31,14 @@ import {
   type TransactionListItem,
 } from "@/lib/data/transactions";
 import type { CategoryGroupRow, CategoryRow } from "@/lib/db/types";
+import { formatShortDate } from "@/lib/dates";
 import { milliunitsToInput, type CurrencySettings } from "@/lib/money";
 import { SPLIT_CATEGORY, type CategoryOptionGroup, type TransactionDraft } from "@/lib/transaction-draft";
 import { TransactionForm } from "./transaction-form";
 
 const PAGE_STEP = 100;
 const MAX_LIMIT = 2000;
-const FILTERS: Array<{ value: TransactionFilter; label: string }> = [
-  { value: "all", label: "Todas" },
-  { value: "unapproved", label: "Sin aprobar" },
-  { value: "uncleared", label: "Sin confirmar en el banco" },
-];
+const FILTER_VALUES: TransactionFilter[] = ["all", "unapproved", "uncleared", "uncategorized"];
 const FLAG_CLASSES: Record<string, string> = {
   red: "bg-red-500",
   orange: "bg-orange-500",
@@ -66,13 +68,14 @@ export async function Register({ budgetId, accountId, searchParams }: RegisterPr
   }
 
   const search = firstValue(searchParams.q);
-  const filter = FILTERS.find((option) => option.value === firstValue(searchParams.filter))?.value ?? "all";
+  const filter = FILTER_VALUES.find((value) => value === firstValue(searchParams.filter)) ?? "all";
   const limit = Math.min(MAX_LIMIT, Math.max(PAGE_STEP, Number(firstValue(searchParams.limit)) || PAGE_STEP));
   const editId = firstValue(searchParams.edit);
   const basePath = accountId ? `/budgets/${budgetId}/accounts/${accountId}` : `/budgets/${budgetId}/accounts`;
 
-  const [page, groups, categories, payeeNames, editing] = await Promise.all([
+  const [page, counts, groups, categories, payeeNames, editing] = await Promise.all([
     listTransactions(budgetId, { accountId, search, filter, limit }),
+    countTransactions(budgetId, accountId),
     listCategoryGroups(budgetId),
     listCategories(budgetId),
     listPayeeNames(budgetId),
@@ -82,24 +85,47 @@ export async function Register({ budgetId, accountId, searchParams }: RegisterPr
   const currency: CurrencySettings = { isoCode: budget.currency_iso_code, decimalDigits: budget.currency_decimal_digits };
   const accountNames = new Map(accounts.map((entry) => [entry.id, entry.name]));
   const openAccounts = accounts.filter((entry) => !entry.closed).map((entry) => ({ id: entry.id, name: entry.name }));
-  const query = new URLSearchParams();
-  if (search) query.set("q", search);
-  if (filter !== "all") query.set("filter", filter);
-  const listPath = query.size > 0 ? `${basePath}?${query}` : basePath;
+  const pathWith = (nextFilter: TransactionFilter, extra: Record<string, string> = {}) => {
+    const query = new URLSearchParams(extra);
+    if (search) query.set("q", search);
+    if (nextFilter !== "all") query.set("filter", nextFilter);
+    return query.size > 0 ? `${basePath}?${query}` : basePath;
+  };
+  const listPath = pathWith(filter);
+  const filters: Array<{ value: TransactionFilter; label: string }> = [
+    { value: "all", label: "Todas" },
+    { value: "unapproved", label: "Sin aprobar" },
+    { value: "uncleared", label: counts.uncleared > 0 ? `Sin confirmar · ${counts.uncleared}` : "Sin confirmar" },
+    { value: "uncategorized", label: counts.uncategorized > 0 ? `Sin categoría · ${counts.uncategorized}` : "Sin categoría" },
+  ];
 
   return (
     <>
-      {account ? (
-        <AccountHeader account={account} currency={currency} />
-      ) : (
-        <h1 className="text-2xl font-semibold">Todos los movimientos</h1>
-      )}
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <span className={eyebrowClass}>
+            {account ? `${accountTypeLabel(account.type)}${account.closed ? " · cerrada" : ""}` : "Todas las cuentas"}
+          </span>
+          <h1 className={headingClass}>{account ? account.name : "Movimientos"}</h1>
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          {account ? <AccountActions account={account} currency={currency} /> : null}
+          {openAccounts.length > 0 ? (
+            <a href="#nueva" className={primaryButtonClass}>
+              <Icon name="plus" />
+              Nueva transacción
+            </a>
+          ) : null}
+        </div>
+      </header>
+
+      {account ? <BalanceStrip account={account} currency={currency} unclearedCount={counts.uncleared} /> : null}
 
       {openAccounts.length === 0 ? (
-        <p className={mutedTextClass}>Agrega una cuenta desde la barra lateral para capturar transacciones.</p>
+        <p className={mutedTextClass}>Agrega una cuenta para empezar a capturar transacciones.</p>
       ) : (
-        <section className={cardClass}>
-          <h2 className="mb-3 text-sm font-medium">{editing ? "Editar transacción" : "Nueva transacción"}</h2>
+        <section id="nueva" className="scroll-mt-4 rounded-[14px] border-2 border-accent bg-surface px-4.5 py-4">
+          <h2 className={`mb-3 ${eyebrowClass}`}>{editing ? "Editar transacción" : "Nueva transacción"}</h2>
           <TransactionForm
             budgetId={budgetId}
             accounts={openAccounts}
@@ -112,13 +138,13 @@ export async function Register({ budgetId, accountId, searchParams }: RegisterPr
             initial={editing ? toDraft(editing, currency.decimalDigits) : undefined}
           />
           {editing ? (
-            <div className="mt-3 flex items-center justify-between border-t border-neutral-200 pt-3 dark:border-neutral-800">
+            <div className="mt-3 flex items-center justify-between border-t border-line pt-3">
               <Link href={listPath} className={linkButtonClass}>Cancelar</Link>
               <form action={deleteTransaction}>
                 <input type="hidden" name="budgetId" value={budgetId} />
                 <input type="hidden" name="id" value={editing.id} />
                 <input type="hidden" name="returnTo" value={listPath} />
-                <SubmitButton className={`${linkButtonClass} !text-red-600 dark:!text-red-400`} pendingLabel="Eliminando…">
+                <SubmitButton className={`${linkButtonClass} !text-red-700`} pendingLabel="Eliminando…">
                   Eliminar transacción
                 </SubmitButton>
               </form>
@@ -127,37 +153,55 @@ export async function Register({ budgetId, accountId, searchParams }: RegisterPr
         </section>
       )}
 
-      <form method="get" action={basePath} className="flex flex-wrap items-end gap-3">
-        <label className={`${labelClass} min-w-48 flex-1`}>
-          Buscar por beneficiario o nota
-          <input name="q" defaultValue={search} className={inputClass} />
-        </label>
-        <label className={labelClass}>
-          Mostrar
-          <select name="filter" defaultValue={filter} className={inputClass}>
-            {FILTERS.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-        </label>
-        <button type="submit" className={secondaryButtonClass}>Filtrar</button>
-      </form>
+      <div className="flex flex-wrap items-center gap-3">
+        <form method="get" action={basePath} className="flex min-w-60 flex-1 items-center gap-2">
+          {filter !== "all" ? <input type="hidden" name="filter" value={filter} /> : null}
+          <label className="flex min-h-11 flex-1 items-center gap-2 rounded-[10px] border border-line-strong bg-surface px-3 text-muted focus-within:border-accent">
+            <Icon name="search" />
+            <span className="sr-only">Buscar por beneficiario o nota</span>
+            <input
+              type="search"
+              name="q"
+              defaultValue={search}
+              placeholder="Buscar por beneficiario o nota"
+              className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none"
+            />
+          </label>
+          <button type="submit" className={secondaryButtonClass}>Buscar</button>
+        </form>
+        <nav aria-label="Mostrar" className="flex flex-wrap gap-1.5">
+          {filters.map((option) => (
+            <Link
+              key={option.value}
+              href={pathWith(option.value)}
+              aria-current={option.value === filter ? "true" : undefined}
+              className={`inline-flex min-h-11 items-center rounded-full border px-3.5 text-sm ${
+                option.value === filter
+                  ? "border-accent bg-accent-soft font-semibold text-accent"
+                  : "border-line-strong bg-surface font-medium text-ink-soft hover:bg-subtle"
+              }`}
+            >
+              {option.label}
+            </Link>
+          ))}
+        </nav>
+      </div>
 
       {page.items.length === 0 ? (
         <p className={mutedTextClass}>No hay transacciones que coincidan.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[40rem] border-collapse text-sm">
+        <section aria-label="Movimientos" className="overflow-x-auto rounded-[14px] border border-line bg-surface">
+          <table className="w-full min-w-[46rem] border-collapse text-sm">
             <thead>
               <tr className={tableHeaderClass}>
-                <th className="py-2 pr-2 font-medium">Fecha</th>
-                {account ? null : <th className="py-2 pr-2 font-medium">Cuenta</th>}
-                <th className="py-2 pr-2 font-medium">Beneficiario</th>
-                <th className="py-2 pr-2 font-medium">Categoría</th>
-                <th className="py-2 pr-2 text-right font-medium">Salida</th>
-                <th className="py-2 pr-2 text-right font-medium">Entrada</th>
-                <th className="py-2 pr-2 font-medium">Banco</th>
-                <th className="py-2 font-medium"><span className="sr-only">Acciones</span></th>
+                <th className="w-14 py-3 pl-4 font-semibold">Banco</th>
+                <th className="px-2 py-3 font-semibold">Fecha</th>
+                {account ? null : <th className="px-2 py-3 font-semibold">Cuenta</th>}
+                <th className="px-2 py-3 font-semibold">Beneficiario</th>
+                <th className="px-2 py-3 font-semibold">Categoría</th>
+                <th className="px-2 py-3 text-right font-semibold">Salida</th>
+                <th className="px-2 py-3 text-right font-semibold">Entrada</th>
+                <th className="py-3 pr-4 font-semibold"><span className="sr-only">Acciones</span></th>
               </tr>
             </thead>
             <tbody>
@@ -168,55 +212,50 @@ export async function Register({ budgetId, accountId, searchParams }: RegisterPr
                   accountNames={accountNames}
                   showAccount={!account}
                   currency={currency}
-                  editHref={`${listPath}${query.size > 0 ? "&" : "?"}edit=${encodeURIComponent(transaction.id)}`}
+                  editHref={`${pathWith(filter, { edit: transaction.id })}#nueva`}
                 />
               ))}
             </tbody>
           </table>
-        </div>
+        </section>
       )}
 
-      {page.hasMore ? (
-        <Link href={`${listPath}${query.size > 0 ? "&" : "?"}limit=${limit + PAGE_STEP}`} className={`${linkButtonClass} self-center`}>
-          Ver más transacciones
-        </Link>
-      ) : null}
+      <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
+        <span>
+          {page.items.length === 1 ? "1 movimiento" : `${page.items.length} movimientos`}
+          {page.hasMore ? " mostrados, hay más" : ""}
+        </span>
+        {page.hasMore ? (
+          <Link href={pathWith(filter, { limit: String(limit + PAGE_STEP) })} className="font-medium text-accent underline underline-offset-4">
+            Ver más transacciones
+          </Link>
+        ) : null}
+      </div>
     </>
   );
 }
 
-function AccountHeader({ account, currency }: { account: AccountWithBalance; currency: CurrencySettings }) {
+function AccountActions({ account, currency }: { account: AccountWithBalance; currency: CurrencySettings }) {
   return (
-    <section className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div>
-          <h1 className="text-2xl font-semibold">{account.name}</h1>
-          <p className={mutedTextClass}>
-            {accountTypeLabel(account.type)}
-            {account.closed ? " · Cerrada" : ""}
-          </p>
-        </div>
-        <form action={setAccountClosed}>
-          <input type="hidden" name="accountId" value={account.id} />
-          <input type="hidden" name="closed" value={account.closed ? "false" : "true"} />
-          <SubmitButton className={linkButtonClass}>{account.closed ? "Reabrir cuenta" : "Cerrar cuenta"}</SubmitButton>
-        </form>
-      </div>
-      <dl className="grid grid-cols-3 gap-3 text-sm">
-        <BalanceStat label="Confirmado en el banco" amount={account.clearedBalance} currency={currency} />
-        <BalanceStat label="Sin confirmar" amount={account.unclearedBalance} currency={currency} />
-        <BalanceStat label="Saldo" amount={account.balance} currency={currency} isEmphasized />
-      </dl>
-      <details className="rounded-lg border border-neutral-200 px-4 py-3 dark:border-neutral-800">
-        <summary className="cursor-pointer text-sm font-medium">Conciliar con el banco</summary>
-        <ActionForm action={reconcileAccount} className="mt-3 flex flex-col gap-3">
-          <input type="hidden" name="accountId" value={account.id} />
-          <input type="hidden" name="currency" value={currency.isoCode} />
-          <p className={mutedTextClass}>
-            Escribe el saldo que muestra tu banco hoy. Las transacciones confirmadas quedan bloqueadas y, si hay
-            diferencia contra <Money amount={account.clearedBalance} currency={currency} />, se registra un ajuste.
-          </p>
-          <div className="flex flex-wrap items-end gap-3">
+    <>
+      <form action={setAccountClosed}>
+        <input type="hidden" name="accountId" value={account.id} />
+        <input type="hidden" name="closed" value={account.closed ? "false" : "true"} />
+        <SubmitButton className={`${linkButtonClass} px-2`}>{account.closed ? "Reabrir cuenta" : "Cerrar cuenta"}</SubmitButton>
+      </form>
+      <details className="relative">
+        <summary className={`${secondaryButtonClass} list-none`}>
+          <Icon name="lock" />
+          Conciliar con el banco
+        </summary>
+        <div className="absolute right-0 z-10 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-[14px] border border-line bg-surface p-4 shadow-lg">
+          <ActionForm action={reconcileAccount} className="flex flex-col gap-3">
+            <input type="hidden" name="accountId" value={account.id} />
+            <input type="hidden" name="currency" value={currency.isoCode} />
+            <p className={mutedTextClass}>
+              Escribe el saldo que muestra tu banco hoy. Lo confirmado queda bloqueado y, si hay diferencia contra{" "}
+              <Money amount={account.clearedBalance} currency={currency} />, se registra un ajuste.
+            </p>
             <label className={labelClass}>
               Saldo en el banco
               <input
@@ -224,35 +263,50 @@ function AccountHeader({ account, currency }: { account: AccountWithBalance; cur
                 inputMode="decimal"
                 required
                 placeholder={milliunitsToInput(account.clearedBalance, currency.decimalDigits)}
-                className={`${inputClass} w-40 text-right`}
+                className={`${inputClass} text-right`}
               />
             </label>
             <SubmitButton pendingLabel="Conciliando…">Conciliar</SubmitButton>
-          </div>
-        </ActionForm>
+          </ActionForm>
+        </div>
       </details>
-    </section>
+    </>
   );
 }
 
-function BalanceStat({
-  label,
-  amount,
+/** Balances read as a sum: confirmed plus unconfirmed equals the account balance. */
+function BalanceStrip({
+  account,
   currency,
-  isEmphasized = false,
+  unclearedCount,
 }: {
-  label: string;
-  amount: number;
+  account: AccountWithBalance;
   currency: CurrencySettings;
-  isEmphasized?: boolean;
+  unclearedCount: number;
 }) {
   return (
-    <div className="rounded-lg border border-neutral-200 px-3 py-2 dark:border-neutral-800">
-      <dt className="text-xs text-neutral-500">{label}</dt>
-      <dd className={isEmphasized ? "text-lg font-semibold" : "text-lg"}>
-        <Money amount={amount} currency={currency} />
-      </dd>
-    </div>
+    <section aria-label="Saldos" className="flex flex-wrap items-center gap-x-5 gap-y-3 rounded-[14px] border border-line bg-surface px-5 py-4">
+      <div className="flex flex-col gap-0.5">
+        <span className="text-[13px] text-muted">Confirmado en el banco</span>
+        <Money amount={account.clearedBalance} currency={currency} className="font-display text-[22px] font-semibold" />
+      </div>
+      <span aria-hidden="true" className="text-[22px] text-muted">+</span>
+      <div className="flex flex-col gap-0.5">
+        <span className="text-[13px] text-muted">
+          Sin confirmar{unclearedCount > 0 ? ` (${unclearedCount} ${unclearedCount === 1 ? "movimiento" : "movimientos"})` : ""}
+        </span>
+        <Money amount={account.unclearedBalance} currency={currency} className="font-display text-[22px] font-semibold" />
+      </div>
+      <span aria-hidden="true" className="text-[22px] text-muted">=</span>
+      <div className="flex flex-col gap-0.5">
+        <span className="text-[13px] text-muted">Saldo de la cuenta</span>
+        <Money
+          amount={account.balance}
+          currency={currency}
+          className={`font-display text-[28px] leading-tight font-bold ${account.balance < 0 ? "text-warn-ink" : "text-accent"}`}
+        />
+      </div>
+    </section>
   );
 }
 
@@ -270,61 +324,60 @@ function TransactionRow({
   editHref: string;
 }) {
   const isSplit = transaction.subtransactions.length > 0;
-  const payeeLabel = transaction.transfer_account_id
-    ? `Transferencia: ${accountNames.get(transaction.transfer_account_id) ?? "otra cuenta"}`
+  const isTransfer = Boolean(transaction.transfer_account_id);
+  const needsCategory = !isSplit && !isTransfer && !transaction.category;
+  const payeeLabel = isTransfer
+    ? `Transferencia: ${accountNames.get(transaction.transfer_account_id ?? "") ?? "otra cuenta"}`
     : (transaction.payee?.name ?? "");
   const flagClass = transaction.flag_color ? FLAG_CLASSES[transaction.flag_color] : undefined;
 
   return (
-    <tr className={`border-b border-neutral-100 align-top dark:border-neutral-900 ${transaction.approved ? "" : "bg-amber-50 dark:bg-amber-950/40"}`}>
-      <td className="py-2 pr-2 whitespace-nowrap tabular-nums">{transaction.date}</td>
-      {showAccount ? <td className="py-2 pr-2">{accountNames.get(transaction.account_id)}</td> : null}
-      <td className="py-2 pr-2">
-        <span className="flex items-center gap-1.5">
+    <tr className={`border-t border-hairline align-middle ${transaction.approved && !needsCategory ? "" : "bg-warn-softer/60"}`}>
+      <td className="py-1 pl-2">
+        <ClearedControl transaction={transaction} />
+      </td>
+      <td className="px-2 py-2 whitespace-nowrap tabular-nums">{formatShortDate(transaction.date)}</td>
+      {showAccount ? <td className="px-2 py-2">{accountNames.get(transaction.account_id)}</td> : null}
+      <td className="px-2 py-2">
+        <span className="flex items-center gap-1.5 font-medium">
           {flagClass ? <span className={`inline-block size-2 shrink-0 rounded-full ${flagClass}`} title="Bandera" /> : null}
           {payeeLabel}
         </span>
-        {transaction.memo ? <span className="block text-xs text-neutral-500">{transaction.memo}</span> : null}
+        {transaction.memo ? <span className="block text-xs text-muted">{transaction.memo}</span> : null}
+        {transaction.approved ? null : <span className="block text-xs text-warn-ink">Sin aprobar</span>}
       </td>
-      <td className="py-2 pr-2">
+      <td className="px-2 py-2">
         {isSplit ? (
           <ul className="flex flex-col gap-0.5">
             {transaction.subtransactions.map((split) => (
               <li key={split.id} className="flex justify-between gap-3">
                 <span>{categoryLabel(split.category) ?? "Sin categoría"}</span>
-                <Money amount={split.amount} currency={currency} className="text-neutral-500" />
+                <Money amount={Math.abs(split.amount)} currency={currency} className="text-muted" />
               </li>
             ))}
           </ul>
+        ) : needsCategory ? (
+          <Link href={editHref} className={`${pillWarnClass} min-h-9 border border-warn-line`}>
+            <Icon name="tag" size={14} strokeWidth={2} />
+            Elegir categoría
+          </Link>
         ) : (
-          (categoryLabel(transaction.category) ?? (transaction.transfer_account_id ? "" : <span className="text-neutral-500">Sin categoría</span>))
+          categoryLabel(transaction.category)
         )}
       </td>
-      <td className="py-2 pr-2 text-right">
+      <td className="px-2 py-2 text-right">
         {transaction.amount < 0 ? <Money amount={-transaction.amount} currency={currency} /> : null}
       </td>
-      <td className="py-2 pr-2 text-right">
-        {transaction.amount > 0 ? <Money amount={transaction.amount} currency={currency} /> : null}
+      <td className="px-2 py-2 text-right font-semibold text-accent-strong">
+        {transaction.amount > 0 ? (
+          <>
+            +<Money amount={transaction.amount} currency={currency} />
+          </>
+        ) : null}
       </td>
-      <td className="py-2 pr-2">
-        {transaction.cleared === "reconciled" ? (
-          <span className="text-xs text-neutral-500" title="Conciliada: ya no se puede cambiar su estado">Conciliada</span>
-        ) : (
-          <form action={setCleared}>
-            <input type="hidden" name="id" value={transaction.id} />
-            <input type="hidden" name="cleared" value={transaction.cleared === "cleared" ? "uncleared" : "cleared"} />
-            <SubmitButton
-              className={`rounded-full border px-2 py-0.5 text-xs ${transaction.cleared === "cleared" ? "border-emerald-600 text-emerald-700 dark:text-emerald-400" : "border-neutral-300 text-neutral-500 dark:border-neutral-700"}`}
-              title="Cambiar si ya aparece en el banco"
-            >
-              {transaction.cleared === "cleared" ? "Confirmada" : "Pendiente"}
-            </SubmitButton>
-          </form>
-        )}
-      </td>
-      <td className="py-2 text-right whitespace-nowrap">
+      <td className="py-2 pr-4 text-right whitespace-nowrap">
         {transaction.approved ? null : (
-          <form action={approveTransaction} className="mr-2 inline">
+          <form action={approveTransaction} className="mr-3 inline">
             <input type="hidden" name="id" value={transaction.id} />
             <SubmitButton className={linkButtonClass}>Aprobar</SubmitButton>
           </form>
@@ -332,6 +385,36 @@ function TransactionRow({
         <Link href={editHref} className={linkButtonClass}>Editar</Link>
       </td>
     </tr>
+  );
+}
+
+/** Lock for reconciled rows; otherwise a toggle between pending (empty circle) and confirmed (check). */
+function ClearedControl({ transaction }: { transaction: TransactionListItem }) {
+  if (transaction.cleared === "reconciled") {
+    return (
+      <span role="img" aria-label="Conciliada" title="Conciliada: ya no se puede cambiar" className="flex size-11 items-center justify-center text-muted">
+        <Icon name="lock" />
+      </span>
+    );
+  }
+  const isCleared = transaction.cleared === "cleared";
+  return (
+    <form action={setCleared}>
+      <input type="hidden" name="id" value={transaction.id} />
+      <input type="hidden" name="cleared" value={isCleared ? "uncleared" : "cleared"} />
+      <SubmitButton
+        className="flex size-11 cursor-pointer items-center justify-center rounded-lg hover:bg-subtle disabled:opacity-60"
+        aria-label={isCleared ? "Confirmada en el banco. Marcar como pendiente" : "Pendiente. Marcar como confirmada en el banco"}
+      >
+        {isCleared ? (
+          <span className="flex size-[18px] items-center justify-center rounded-full bg-accent text-white">
+            <Icon name="check" size={12} strokeWidth={3} />
+          </span>
+        ) : (
+          <span className="block size-[18px] rounded-full border-2 border-line-strong" />
+        )}
+      </SubmitButton>
+    </form>
   );
 }
 

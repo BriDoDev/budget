@@ -19,17 +19,17 @@ export function LoginForm() {
         type="email"
         autoComplete="email"
         required
-        className="rounded-md border border-neutral-300 bg-transparent px-3 py-2 dark:border-neutral-700"
+        className="min-h-11 rounded-lg border border-line-strong bg-surface px-3 outline-none focus:border-accent"
       />
       <button
         type="submit"
         disabled={isPending}
-        className="rounded-md bg-neutral-900 px-3 py-2 font-medium text-white disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900"
+        className="min-h-11 cursor-pointer rounded-[10px] bg-accent px-4 font-semibold text-white hover:brightness-110 disabled:opacity-60"
       >
         {isPending ? "Enviando…" : "Enviar enlace de acceso"}
       </button>
       {state.message ? (
-        <p role="status" className={state.status === "error" ? "text-sm text-red-600" : "text-sm text-neutral-600 dark:text-neutral-400"}>
+        <p role="status" className={state.status === "error" ? "text-sm text-red-700" : "text-sm text-muted"}>
           {state.message}
         </p>
       ) : null}

@@ -44,7 +44,7 @@ describe("comparePlanWithEngine", () => {
     const rows = mapPlanExport(plan, { householdId: "home", importedAt: "2026-11-11T00:00:00.000Z" });
     const report = comparePlanWithEngine(plan, rows, "2026-11-01");
 
-    expect(report.readyToAssign).toEqual({ ynab: 11_500, ours: 11_500 });
+    expect(report.unassigned).toEqual({ ynab: 11_500, ours: 11_500 });
     expect(report.categoriesCompared).toBe(2);
     expect(report.mismatches).toEqual([{ name: "Luz", ynab: 999, ours: 500 }]);
   });

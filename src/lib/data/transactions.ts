@@ -5,7 +5,7 @@ import { createClient } from "../supabase/server";
 const DEFAULT_LIMIT = 100;
 const MAX_MATCHING_PAYEES = 200;
 
-export type TransactionFilter = "all" | "unapproved" | "uncleared";
+export type TransactionFilter = "all" | "unapproved" | "uncleared" | "uncategorized";
 
 export interface TransactionQuery {
   accountId?: string;
@@ -83,6 +83,9 @@ export async function listTransactions(budgetId: string, query: TransactionQuery
     request = request.eq("approved", false);
   } else if (query.filter === "uncleared") {
     request = request.eq("cleared", "uncleared");
+  } else if (query.filter === "uncategorized") {
+    // No category, not a transfer and not a split (splits carry their categories in subtransactions).
+    request = request.is("category_id", null).is("transfer_account_id", null).is("subtransactions", null);
   }
 
   const term = sanitizeSearch(query.search);
@@ -107,6 +110,37 @@ export async function listTransactions(budgetId: string, query: TransactionQuery
   }
   const rows = data ?? [];
   return { items: rows.slice(0, limit), hasMore: rows.length > limit };
+}
+
+export interface TransactionCounts {
+  uncleared: number;
+  uncategorized: number;
+}
+
+/** How many transactions still need attention, for the filter labels. */
+export async function countTransactions(budgetId: string, accountId?: string): Promise<TransactionCounts> {
+  const supabase = await createClient();
+  let uncleared = supabase
+    .from("transactions")
+    .select("id", { count: "exact", head: true })
+    .eq("budget_id", budgetId)
+    .eq("cleared", "uncleared");
+  let uncategorized = supabase
+    .from("transactions")
+    .select("id, subtransactions(id)", { count: "exact", head: true })
+    .eq("budget_id", budgetId)
+    .is("category_id", null)
+    .is("transfer_account_id", null)
+    .is("subtransactions", null);
+  if (accountId) {
+    uncleared = uncleared.eq("account_id", accountId);
+    uncategorized = uncategorized.eq("account_id", accountId);
+  }
+  const [unclearedResult, uncategorizedResult] = await Promise.all([uncleared, uncategorized]);
+  if (unclearedResult.error || uncategorizedResult.error) {
+    throw new Error("Could not count transactions.");
+  }
+  return { uncleared: unclearedResult.count ?? 0, uncategorized: uncategorizedResult.count ?? 0 };
 }
 
 export async function getTransaction(budgetId: string, transactionId: string): Promise<TransactionListItem | null> {

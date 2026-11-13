@@ -48,7 +48,7 @@ export function TransactionForm(props: TransactionFormProps) {
       {/* Remounting the fields clears them after each saved transaction. */}
       <TransactionFields key={`${props.initial?.id ?? "new"}:${state.version}`} {...props} isPending={isPending} />
       {state.message ? (
-        <p role="status" className={`text-sm ${state.ok ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+        <p role="status" className={`text-sm ${state.ok ? "text-accent-strong" : "text-red-700"}`}>
           {state.message}
         </p>
       ) : null}
@@ -100,7 +100,7 @@ function TransactionFields({
       <input type="hidden" name="splits" value={JSON.stringify(isSplit ? splits : [])} />
       {fixedAccountId ? <input type="hidden" name="accountId" value={fixedAccountId} /> : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {fixedAccountId ? null : (
           <label className={labelClass}>
             Cuenta
@@ -174,8 +174,8 @@ function TransactionFields({
       </div>
 
       {isSplit ? (
-        <fieldset className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
-          <legend className="px-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">Partes de la transacción</legend>
+        <fieldset className="flex flex-col gap-2 rounded-[10px] border border-line p-3">
+          <legend className="px-1 text-xs font-semibold text-muted">Partes de la transacción</legend>
           {splits.map((split, index) => (
             <div key={index} className="grid grid-cols-[1fr_7rem_auto] items-center gap-2">
               <select
@@ -210,7 +210,7 @@ function TransactionFields({
             <button type="button" className={linkButtonClass} onClick={() => setSplits((current) => [...current, { categoryId: "", amount: "" }])}>
               Agregar parte
             </button>
-            <span className={remaining === 0 ? "text-neutral-500" : "text-amber-700 dark:text-amber-400"}>
+            <span className={remaining === 0 ? "text-muted" : "text-warn-ink"}>
               {remaining === 0 ? "Las partes suman el total" : `Falta repartir ${remaining.toFixed(2)}`}
             </span>
           </div>
@@ -218,8 +218,8 @@ function TransactionFields({
       ) : null}
 
       <div className="flex flex-wrap items-center gap-4">
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="cleared" defaultChecked={initial?.isCleared ?? false} />
+        <label className="flex min-h-11 items-center gap-2 text-sm">
+          <input type="checkbox" name="cleared" className="size-[18px]" defaultChecked={initial?.isCleared ?? false} />
           Ya aparece en el banco
         </label>
         <label className="flex items-center gap-2 text-sm">

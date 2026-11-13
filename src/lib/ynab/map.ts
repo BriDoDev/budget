@@ -132,7 +132,12 @@ export function mapPlanExport(plan: YnabPlan, options: MapPlanOptions): ImportRo
 
   const categories: Unsorted<CategoryRow>[] = [];
   for (const [index, category] of plan.categories.entries()) {
-    const group = groupsById.get(category.category_group_id);
+    // A hidden category keeps its place in the group it came from.
+    const groupId =
+      category.original_category_group_id && groupsById.has(category.original_category_group_id)
+        ? category.original_category_group_id
+        : category.category_group_id;
+    const group = groupsById.get(groupId);
     if (category.deleted || !group) {
       continue;
     }
@@ -140,7 +145,7 @@ export function mapPlanExport(plan: YnabPlan, options: MapPlanOptions): ImportRo
     categories.push({
       id: category.id,
       budget_id: budgetId,
-      group_id: category.category_group_id,
+      group_id: groupId,
       name: category.name,
       kind,
       hidden: category.hidden,
@@ -299,7 +304,8 @@ export function resolveCategoryKind(category: Pick<YnabCategory, "name" | "inter
   if (group.name === CREDIT_CARD_PAYMENTS_GROUP) {
     return "credit_card_payment";
   }
-  if (category.internal || group.isInternal) {
+  // Newer exports flag internal categories themselves; older ones only flag the group.
+  if (category.internal ?? group.isInternal) {
     return INCOME_CATEGORY_PATTERN.test(category.name) ? "income" : "internal";
   }
   return "standard";

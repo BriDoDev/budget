@@ -3,6 +3,7 @@ import {
   computeGoalStatus,
   CREDIT_ACCOUNT_TYPES,
   type ActivityLine,
+  type CardAdvanceLine,
   type EngineResult,
   type Goal,
   type GoalStatus,
@@ -15,7 +16,7 @@ import type { CurrencySettings } from "./money";
 
 /** Aggregated activity as returned by the `budget_activity` SQL function. */
 export interface ActivityAggregate {
-  kind: "activity" | "payment";
+  kind: "activity" | "payment" | "advance";
   category_id: string | null;
   account_id: string;
   account_type: string;
@@ -36,6 +37,10 @@ export interface CategoryLine {
   name: string;
   kind: CategoryRow["kind"];
   note: string | null;
+  /** Credit account paid from this category (payment categories only). */
+  linkedAccountId: string | null;
+  /** Positive balance that came in from the previous month. */
+  carryover: number;
   assigned: number;
   activity: number;
   available: number;
@@ -68,10 +73,13 @@ export interface BudgetMonthView {
 export function runEngine(rows: Omit<BudgetRows, "budget" | "groups">, throughMonth: MonthKey): EngineResult {
   const activity: ActivityLine[] = [];
   const payments: PaymentLine[] = [];
+  const cardAdvances: CardAdvanceLine[] = [];
   for (const row of rows.activity) {
     const month = toMonthKey(row.month);
     if (row.kind === "payment") {
       payments.push({ accountId: row.account_id, month, amount: row.amount });
+    } else if (row.kind === "advance") {
+      cardAdvances.push({ accountId: row.account_id, month, amount: row.amount });
     } else if (row.category_id) {
       activity.push({
         categoryId: row.category_id,
@@ -96,6 +104,7 @@ export function runEngine(rows: Omit<BudgetRows, "budget" | "groups">, throughMo
     })),
     activity,
     payments,
+    cardAdvances,
     throughMonth,
   });
 }
@@ -128,6 +137,8 @@ export function buildBudgetMonthView(rows: BudgetRows, month: MonthKey): BudgetM
             name: category.name,
             kind: category.kind,
             note: category.note,
+            linkedAccountId: category.linked_account_id,
+            carryover: values?.carryover ?? 0,
             assigned: values?.assigned ?? 0,
             activity: values?.activity ?? 0,
             available: values?.available ?? 0,
@@ -180,6 +191,7 @@ function emptyMonth(month: MonthKey): MonthResult {
   return {
     month,
     income: 0,
+    cardAdvances: 0,
     assigned: 0,
     activity: 0,
     overspent: 0,

@@ -190,3 +190,19 @@ describe("mapPlanExport delta", () => {
     expect(rows.deleted.payees).toEqual(["gone"]);
   });
 });
+
+describe("mapPlanExport hidden categories", () => {
+  it("keeps a hidden category as a regular one in its original group", () => {
+    const withHidden: YnabPlan = {
+      ...plan,
+      category_groups: [...plan.category_groups, { id: "hidden", name: "Hidden Categories", hidden: false, internal: true, deleted: false }],
+      categories: [
+        ...plan.categories,
+        category({ id: "gym", category_group_id: "hidden", original_category_group_id: "bills", name: "Gimnasio", hidden: true, internal: false }),
+      ],
+    };
+    const rows = mapPlanExport(withHidden, { householdId: "home", importedAt: "2026-11-11T00:00:00.000Z" });
+
+    expect(rows.categories.find((row) => row.id === "gym")).toMatchObject({ group_id: "bills", kind: "standard", hidden: true });
+  });
+});

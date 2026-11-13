@@ -150,7 +150,7 @@ the same names in lower camel case, which is what this app stores. The exact
 date arithmetic of `TwiceAMonth` was not located; `src/lib/schedule.ts`
 alternates between the first date's day and 15 days later. (Inferred)
 
-### Credit card payment categories (Inferred)
+### Credit card payment categories (Inferred, checked against a real plan)
 
 The per-transaction attribution (`credit_amount_adjusted`,
 `subcategory_credit_amount_preceding`) lives in the Kotlin-compiled part of the
@@ -160,14 +160,30 @@ the observed split above:
 ```
 funded_credit[category]   = credit_outflows - unbudgeted_credit_outflows
 payment_category.activity = Σ -funded_credit of the card's spending
-                          + Σ -(transfers recorded on the card account)
+                          + Σ -(transfers into the card)          payments
+additional_to_be_budgeted = Σ  (transfers out of the card)        cash advances
 ```
 
-So covered card spending moves into the card's payment category, paying the
-card spends it, and a refund on the card moves money back. When one category
-has spending on several cards in a month, the funded part is shared between
-them in proportion to that spending. The import prints a comparison against
-YNAB's own balances so differences from this approximation are visible.
+So covered card spending moves into the card's payment category and paying the
+card spends it. Two rules came from comparing an imported plan with the figures
+YNAB's API reports, month by month:
+
+- A transfer **out of** a card into a budget cash account does not fund the
+  payment category. That cash becomes money to assign (this is what
+  `additional_to_be_budgeted` carries).
+- A card's starting balance is exported as a negative amount in the
+  "Inflow: Ready to Assign" category. It is debt, not negative income, so it is
+  ignored for Ready to Assign.
+
+With both rules, that plan (509 transactions over 12 months, 4 cards) matched
+exactly: every category balance in every month, and each month's unassigned
+total. The API's `to_be_budgeted` is the running total before discounting money
+assigned in later months (`available_to_budget`), not the Ready to Assign figure
+shown in the month header.
+
+When one category has spending on several cards in a month, the funded part is
+shared between them in proportion to that spending; that case did not occur in
+the plan used for the check.
 
 ## 5. How this pass was done
 

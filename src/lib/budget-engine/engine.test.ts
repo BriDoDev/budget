@@ -204,6 +204,18 @@ describe("credit cards", () => {
     expect(result.getCategoryMonth("visa-payment", JAN)?.available).toBe(10_000);
   });
 
+  it("turns cash taken from a card into money to assign without touching its payment category", () => {
+    const result = computeBudget({
+      categories: cardCategories,
+      assignments: [],
+      activity: [income],
+      cardAdvances: [{ accountId: "visa", month: JAN, amount: 80_000 }],
+    });
+
+    expect(result.getMonth(JAN)).toMatchObject({ income: 500_000, cardAdvances: 80_000, readyToAssign: 580_000 });
+    expect(result.getCategoryMonth("visa-payment", JAN)?.available).toBe(0);
+  });
+
   it("splits funded spending between cards and keeps refunds on their own card", () => {
     const shares = splitFundedCredit(-90_000, new Map([["amex", -100_000], ["visa", -50_000], ["store", 30_000]]));
 

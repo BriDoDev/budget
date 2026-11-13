@@ -22,6 +22,8 @@ reverse engineering pass of the YNAB web client: see
 - **Household**: members sign in with a magic link; a member invites the other
   by e-mail.
 - **YNAB sync** (one way, YNAB → app): full import first, then only what changed.
+- **Fresh start**: a new budget with the same accounts (current balances),
+  categories, goals and scheduled transactions, without history or assignments.
 
 Not included: direct bank connections and card wallets.
 
@@ -95,12 +97,14 @@ to YNAB; when the same row was edited on both sides, the YNAB version wins.
 
 ## Known gaps
 
-- Credit card payment funding is computed per month, not per transaction, and
-  was inferred rather than read from YNAB's code; check the import comparison.
+- Credit card payment funding is computed per month, not per transaction. It
+  matched YNAB exactly on the one real plan it was checked against; the import
+  prints the comparison so you can check yours.
 - Weekly goals are approximated as a monthly amount.
 - Editing a split transaction drops transfer legs inside the split.
 - Categories and accounts can be hidden or closed, not deleted.
 - Scheduled transactions are recorded manually; nothing runs on a timer.
+- The interface has a light theme only; it does not follow the system dark mode.
 
 Details and the list of YNAB behavior not reproduced are at the end of
 `docs/ynab-internals.md`.

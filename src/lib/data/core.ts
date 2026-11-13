@@ -14,7 +14,7 @@ export type PageQuery<T> = (
 ) => PromiseLike<{ data: T[] | null; error: PostgrestError | null }>;
 
 export interface ActivityRow {
-  kind: "activity" | "payment";
+  kind: "activity" | "payment" | "advance";
   category_id: string | null;
   account_id: string;
   account_type: string;

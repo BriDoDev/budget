@@ -63,6 +63,8 @@ export interface YnabCategory {
   name: string;
   hidden: boolean;
   internal?: boolean;
+  /** Group the category belonged to before it was hidden (hidden categories move to a "Hidden Categories" group). */
+  original_category_group_id?: string | null;
   note: string | null;
   budgeted: number;
   activity?: number;

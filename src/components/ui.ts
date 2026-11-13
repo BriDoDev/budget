@@ -1,24 +1,41 @@
-/** Shared Tailwind class strings so forms and tables look the same across screens. */
+/** Shared Tailwind class strings so forms, tables and cards look the same across screens. */
 
 export const inputClass =
-  "w-full rounded-md border border-neutral-300 bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:focus:border-neutral-400";
+  "w-full min-h-11 rounded-lg border border-line-strong bg-surface px-2.5 text-sm text-ink outline-none focus:border-accent";
 
-export const labelClass = "flex flex-col gap-1 text-xs font-medium text-neutral-600 dark:text-neutral-400";
+export const labelClass = "flex flex-col gap-1.5 text-xs font-semibold text-muted";
 
 export const primaryButtonClass =
-  "rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300";
+  "inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-accent px-4 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-60";
 
 export const secondaryButtonClass =
-  "rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium hover:bg-neutral-100 disabled:opacity-60 dark:border-neutral-700 dark:hover:bg-neutral-800";
+  "inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-[10px] border border-line-strong bg-surface px-4 text-sm font-semibold text-ink hover:bg-subtle disabled:opacity-60";
 
 export const linkButtonClass =
-  "text-sm text-neutral-600 underline-offset-4 hover:underline disabled:opacity-60 dark:text-neutral-400";
+  "cursor-pointer text-sm font-medium text-muted underline underline-offset-4 hover:text-ink disabled:opacity-60";
 
-export const cardClass = "rounded-lg border border-neutral-200 p-4 dark:border-neutral-800";
+export const cardClass = "rounded-[14px] border border-line bg-surface p-5";
 
-export const mutedTextClass = "text-sm text-neutral-600 dark:text-neutral-400";
+export const mutedTextClass = "text-sm text-muted";
 
-export const tableHeaderClass =
-  "border-b border-neutral-200 text-left text-xs font-medium text-neutral-500 dark:border-neutral-800";
+export const tableHeaderClass = "border-b border-line text-left text-xs font-semibold text-muted";
 
-export const pageClass = "mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6";
+/** Page container; the bottom padding clears the fixed navigation bar on phones. */
+export const pageClass = "mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pt-6 pb-28 sm:px-8 sm:pt-7 md:pb-8";
+
+export const headingClass = "font-display text-[28px] leading-tight font-semibold";
+
+export const sectionTitleClass = "font-display text-lg font-semibold";
+
+export const eyebrowClass = "text-xs font-semibold tracking-wide text-muted uppercase";
+
+export const statValueClass = "font-display text-2xl font-semibold tabular-nums";
+
+const pillClass = "inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-semibold tabular-nums";
+
+/** Money available to spend. */
+export const pillPositiveClass = `${pillClass} bg-accent-soft text-accent-strong`;
+/** Nothing left, nothing owed. */
+export const pillNeutralClass = `${pillClass} bg-neutral-soft text-ink-soft`;
+/** Overspent or otherwise needing attention. */
+export const pillWarnClass = `${pillClass} bg-warn-soft text-warn-ink`;

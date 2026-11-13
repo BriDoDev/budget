@@ -12,10 +12,20 @@ interface AssignInputProps {
   month: string;
   assigned: number;
   decimalDigits: number;
+  /** Stronger outline for the category shown in the detail panel. */
+  isHighlighted?: boolean;
 }
 
-/** Editable "assigned" cell: saves on Enter or when the field loses focus with a new value. */
-export function AssignInput({ budgetId, categoryId, categoryName, month, assigned, decimalDigits }: AssignInputProps) {
+/** Editable "assigned" field: saves on Enter or when it loses focus with a new value. */
+export function AssignInput({
+  budgetId,
+  categoryId,
+  categoryName,
+  month,
+  assigned,
+  decimalDigits,
+  isHighlighted = false,
+}: AssignInputProps) {
   const [state, formAction, isPending] = useActionState(setAssignment, IDLE_STATE);
   const formRef = useRef<HTMLFormElement>(null);
   const initialValue = milliunitsToInput(assigned, decimalDigits);
@@ -37,10 +47,12 @@ export function AssignInput({ budgetId, categoryId, categoryName, month, assigne
             formRef.current?.requestSubmit();
           }
         }}
-        className={`w-24 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-right tabular-nums outline-none hover:border-neutral-300 focus:border-neutral-500 dark:hover:border-neutral-700 dark:focus:border-neutral-400 ${isPending ? "opacity-60" : ""}`}
+        className={`min-h-11 w-full max-w-[124px] rounded-lg bg-surface px-2.5 text-right text-ink tabular-nums outline-none focus:border-accent ${
+          isHighlighted ? "border-2 border-accent" : "border border-line-strong"
+        } ${isPending ? "opacity-60" : ""}`}
       />
       {!state.ok && state.message ? (
-        <span role="alert" className="text-xs text-red-600 dark:text-red-400">
+        <span role="alert" className="text-xs text-red-700">
           {state.message}
         </span>
       ) : null}

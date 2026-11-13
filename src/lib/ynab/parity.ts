@@ -11,14 +11,19 @@ export interface ParityMismatch {
 
 export interface ParityReport {
   month: MonthKey;
-  readyToAssign: { ynab: number; ours: number } | null;
+  /**
+   * Unassigned money at the end of the month. YNAB's API reports the running
+   * total before discounting what is assigned in later months, so it is
+   * compared with the engine's `availableToBudget`.
+   */
+  unassigned: { ynab: number; ours: number } | null;
   categoriesCompared: number;
   mismatches: ParityMismatch[];
 }
 
 /**
  * Runs our engine over a full YNAB export and compares one month against the
- * figures YNAB itself reports (category balances and Ready to Assign). It is a
+ * figures YNAB itself reports (category balances and unassigned money). It is a
  * diagnostic for the import: mismatches point at rules the engine does not
  * reproduce yet.
  */
@@ -35,6 +40,7 @@ export function comparePlanWithEngine(plan: YnabPlan, rows: ImportRows, month: M
       transferAccountId: transaction.transfer_account_id,
     })),
     rows.subtransactions.map((sub) => ({ transactionId: sub.transaction_id, amount: sub.amount, categoryId: sub.category_id })),
+    { incomeCategoryIds: new Set(rows.categories.filter((category) => category.kind === "income").map((category) => category.id)) },
   );
   const result = computeBudget({
     categories: rows.categories.map((category) => ({
@@ -49,6 +55,7 @@ export function comparePlanWithEngine(plan: YnabPlan, rows: ImportRows, month: M
     })),
     activity: ledger.activity,
     payments: ledger.payments,
+    cardAdvances: ledger.cardAdvances,
     throughMonth: month,
   });
 
@@ -68,10 +75,10 @@ export function comparePlanWithEngine(plan: YnabPlan, rows: ImportRows, month: M
   const ourMonth = result.getMonth(month);
   return {
     month,
-    readyToAssign:
+    unassigned:
       ynabMonth?.to_be_budgeted === undefined || !ourMonth
         ? null
-        : { ynab: ynabMonth.to_be_budgeted, ours: ourMonth.readyToAssign },
+        : { ynab: ynabMonth.to_be_budgeted, ours: ourMonth.availableToBudget },
     categoriesCompared,
     mismatches: mismatches.sort((a, b) => Math.abs(b.ynab - b.ours) - Math.abs(a.ynab - a.ours)),
   };

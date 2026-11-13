@@ -9,13 +9,13 @@ export default function HomePage() {
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-10">
       <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Presupuestos</h1>
+        <h1 className="font-display text-[28px] leading-tight font-semibold">Presupuestos</h1>
         <div className="flex items-center gap-4">
           <Link href="/household" className={linkButtonClass}>Hogar</Link>
           <SignOutButton />
         </div>
       </header>
-      <Suspense fallback={<p className="text-neutral-500">Cargando presupuestos…</p>}>
+      <Suspense fallback={<p className="text-muted">Cargando presupuestos…</p>}>
         <BudgetList />
       </Suspense>
     </main>
@@ -40,15 +40,15 @@ async function BudgetList() {
   }
 
   return (
-    <ul className="divide-y divide-neutral-200 rounded-lg border border-neutral-200 dark:divide-neutral-800 dark:border-neutral-800">
+    <ul className="divide-y divide-line overflow-hidden rounded-[14px] border border-line bg-surface">
       {budgets.map((budget) => (
         <li key={budget.id}>
           <Link
             href={`/budgets/${budget.id}`}
-            className="flex items-center justify-between px-4 py-3 hover:bg-neutral-50 dark:hover:bg-neutral-900"
+            className="flex min-h-14 items-center justify-between px-5 py-3 hover:bg-subtle"
           >
             <span className="font-medium">{budget.name}</span>
-            <span className="text-sm text-neutral-500">{budget.currency_iso_code}</span>
+            <span className="text-sm text-muted">{budget.currency_iso_code}</span>
           </Link>
         </li>
       ))}

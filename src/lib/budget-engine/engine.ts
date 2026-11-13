@@ -23,12 +23,13 @@ const UNKNOWN_ACCOUNT = "";
  *   creditOverspent  = min(max(unbudgetedCredit, available), 0)
  *
  * Credit cards: the funded part of a category's card spending moves into the
- * card's payment category (-fundedCredit), and transfers to or from the card
- * (payments) change that category too. Payment categories are then computed
- * like any other envelope, with those amounts as cash activity.
+ * card's payment category (-fundedCredit), and payments to the card spend that
+ * category. Payment categories are then computed like any other envelope, with
+ * those amounts as cash activity. Cash taken out of a card is not reserved for
+ * its payment: it becomes money to assign.
  *
  * Per month:
- *   availableToBudget = prev.availableToBudget + prev.overspent + income - assigned
+ *   availableToBudget = prev.availableToBudget + prev.overspent + income + cardAdvances - assigned
  *   fundedInFuture    = availableToBudget > 0 && assignedInFuture > 0
  *                         ? min(availableToBudget, assignedInFuture) : 0
  *   readyToAssign     = availableToBudget - fundedInFuture
@@ -46,6 +47,7 @@ export function computeBudget(input: EngineInput): EngineResult {
   const creditByKey = new Map<string, Map<string, number>>();
   const paymentsByKey = new Map<string, number>();
   const incomeByMonth = new Map<MonthKey, number>();
+  const advancesByMonth = new Map<MonthKey, number>();
 
   for (const assignment of input.assignments) {
     addTo(assignedByKey, key(assignment.categoryId, assignment.month), assignment.amount);
@@ -64,6 +66,9 @@ export function computeBudget(input: EngineInput): EngineResult {
   }
   for (const payment of input.payments ?? []) {
     addTo(paymentsByKey, key(payment.accountId, payment.month), payment.amount);
+  }
+  for (const advance of input.cardAdvances ?? []) {
+    addTo(advancesByMonth, advance.month, advance.amount);
   }
 
   const categoryMonths = new Map<string, CategoryMonthResult>();
@@ -119,11 +124,14 @@ export function computeBudget(input: EngineInput): EngineResult {
     }
 
     const income = incomeByMonth.get(month) ?? 0;
-    const availableToBudget = previousAvailableToBudget + previousOverspent + income - totals.assigned;
+    const cardAdvances = advancesByMonth.get(month) ?? 0;
+    const availableToBudget =
+      previousAvailableToBudget + previousOverspent + income + cardAdvances - totals.assigned;
 
     monthResults.push({
       month,
       income,
+      cardAdvances,
       assigned: totals.assigned,
       activity: totals.activity,
       overspent: totals.overspent,
@@ -233,6 +241,7 @@ function resolveMonths(input: EngineInput): MonthKey[] {
     ...input.assignments.map((assignment) => assignment.month),
     ...input.activity.map((line) => line.month),
     ...(input.payments ?? []).map((payment) => payment.month),
+    ...(input.cardAdvances ?? []).map((advance) => advance.month),
   ];
   if (input.throughMonth) {
     dataMonths.push(input.throughMonth);

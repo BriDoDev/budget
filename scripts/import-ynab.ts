@@ -7,8 +7,8 @@
  * YNAB's. Later runs only fetch what changed in YNAB since the previous one.
  *
  * Reads YNAB_ACCESS_TOKEN, YNAB_PLAN_ID, ALLOWED_EMAILS, HOUSEHOLD_NAME and the
- * Supabase variables from .env.local. Every e-mail in ALLOWED_EMAILS must have
- * signed in once (magic link) so its user exists; the first one owns the household.
+ * Supabase variables from .env.local. The first e-mail in ALLOWED_EMAILS owns
+ * the household; users that do not exist yet are created.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseAllowedEmails } from "../src/lib/auth/allowed-emails";
@@ -54,9 +54,9 @@ function printParity(result: Awaited<ReturnType<typeof syncYnabPlan>>): void {
   const money = (amount: number) => formatMilliunits(amount, currency);
 
   console.log(`\nCheck against YNAB for ${report.month.slice(0, 7)}:`);
-  if (report.readyToAssign) {
-    const { ynab, ours } = report.readyToAssign;
-    console.log(`  Ready to Assign: YNAB ${money(ynab)}, this app ${money(ours)}${ynab === ours ? " ✓" : " ✗"}`);
+  if (report.unassigned) {
+    const { ynab, ours } = report.unassigned;
+    console.log(`  Unassigned money: YNAB ${money(ynab)}, this app ${money(ours)}${ynab === ours ? " ✓" : " ✗"}`);
   }
   const matching = report.categoriesCompared - report.mismatches.length;
   console.log(`  Category balances: ${matching} of ${report.categoriesCompared} match`);
@@ -82,9 +82,13 @@ async function resolveUserIds(supabase: SupabaseClient, emails: string[]): Promi
     }
   }
 
-  const missing = emails.filter((email) => !idsByEmail.has(email));
-  if (missing.length > 0) {
-    throw new Error(`These e-mails have not signed in yet (open the app and request a magic link): ${missing.join(", ")}`);
+  // Members who never signed in get their user created here; they still enter with a magic link.
+  for (const email of emails.filter((candidate) => !idsByEmail.has(candidate))) {
+    const { data, error } = await supabase.auth.admin.createUser({ email, email_confirm: true });
+    if (error || !data.user) {
+      throw new Error(`Could not create the user for ${email}: ${error?.message ?? "unknown error"}`);
+    }
+    idsByEmail.set(email, data.user.id);
   }
   return emails.map((email) => idsByEmail.get(email)!);
 }

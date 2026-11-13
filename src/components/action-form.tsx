@@ -26,7 +26,7 @@ export function ActionForm({ action, children, className }: ActionFormProps) {
         {children}
       </div>
       {state.message ? (
-        <p role="status" className={`text-sm ${state.ok ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+        <p role="status" className={`text-sm ${state.ok ? "text-accent-strong" : "text-red-700"}`}>
           {state.message}
         </p>
       ) : null}

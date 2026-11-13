@@ -7,7 +7,7 @@ type Props = PageProps<"/budgets/[budgetId]/accounts/[accountId]">;
 export default function AccountPage({ params, searchParams }: Props) {
   return (
     <main className={pageClass}>
-      <Suspense fallback={<p className="text-neutral-500">Cargando movimientos…</p>}>
+      <Suspense fallback={<p className="text-muted">Cargando movimientos…</p>}>
         <Account params={params} searchParams={searchParams} />
       </Suspense>
     </main>

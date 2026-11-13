@@ -1,16 +1,19 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { Money } from "@/components/money";
-import { cardClass, inputClass, labelClass, mutedTextClass, pageClass, secondaryButtonClass, tableHeaderClass } from "@/components/ui";
+import { cardClass, headingClass, mutedTextClass, pageClass, sectionTitleClass, statValueClass, tableHeaderClass } from "@/components/ui";
 import { formatMonthName, groupLabel } from "@/lib/categories";
 import { fetchAccountMonthTotals, fetchActivity, getBudget, listCategories, listCategoryGroups } from "@/lib/data/core";
-import type { CurrencySettings } from "@/lib/money";
+import { formatMonthWord } from "@/lib/dates";
+import { formatMilliunits, type CurrencySettings } from "@/lib/money";
 import { addMonths, currentMonthKey, monthRange, toMonthKey } from "@/lib/month";
 import {
   incomeVsExpenses,
   netWorthByMonth,
   spendingByCategory,
   type CategorySpending,
+  type MonthCashflow,
   type ReportCategory,
 } from "@/lib/reports";
 import { CashflowBars, NetWorthLine, SpendingBars } from "./charts";
@@ -24,8 +27,7 @@ const MAX_CATEGORY_BARS = 10;
 export default function ReportsPage({ params, searchParams }: Props) {
   return (
     <main className={pageClass}>
-      <h1 className="text-2xl font-semibold">Reportes</h1>
-      <Suspense fallback={<p className="text-neutral-500">Calculando reportes…</p>}>
+      <Suspense fallback={<p className={mutedTextClass}>Calculando reportes…</p>}>
         <Reports params={params} searchParams={searchParams} />
       </Suspense>
     </main>
@@ -75,131 +77,197 @@ async function Reports({ params, searchParams }: Pick<Props, "params" | "searchP
 
   const totalIncome = cashflow.reduce((sum, month) => sum + month.income, 0);
   const totalExpenses = cashflow.reduce((sum, month) => sum + month.expenses, 0);
-  const currentNetWorth = netWorth.at(-1)?.netWorth ?? 0;
+  const latest = netWorth.at(-1);
+  const previous = netWorth.at(-2);
   const spendingBars = foldSmallCategories(spending);
+  const rangeLabel = `de ${formatMonthWord(months[0])} a ${formatMonthWord(lastMonth)}`;
 
   return (
     <>
-      <form method="get" className="flex items-end gap-3">
-        <label className={labelClass}>
-          Periodo
-          <select name="months" defaultValue={period} className={inputClass}>
-            {PERIODS.map((option) => (
-              <option key={option} value={option}>Últimos {option} meses</option>
-            ))}
-          </select>
-        </label>
-        <button type="submit" className={secondaryButtonClass}>Aplicar</button>
-      </form>
+      <header className="flex flex-wrap items-center justify-between gap-4">
+        <h1 className={headingClass}>Reportes</h1>
+        <nav aria-label="Periodo" className="flex gap-0.5 rounded-[10px] border border-line-strong bg-surface p-[3px]">
+          {PERIODS.map((option) => (
+            <Link
+              key={option}
+              href={`/budgets/${budgetId}/reports?months=${option}`}
+              aria-current={option === period ? "true" : undefined}
+              className={`flex min-h-10 items-center rounded-lg px-4 text-sm ${
+                option === period ? "bg-accent font-semibold text-white" : "font-medium text-ink-soft hover:bg-subtle"
+              }`}
+            >
+              {option} meses
+            </Link>
+          ))}
+        </nav>
+      </header>
 
-      <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Ingresos del periodo" amount={totalIncome} currency={currency} />
-        <Stat label="Gastos del periodo" amount={totalExpenses} currency={currency} />
-        <Stat label="Diferencia" amount={totalIncome - totalExpenses} currency={currency} />
-        <Stat label="Patrimonio hoy" amount={currentNetWorth} currency={currency} />
+      <dl className="flex flex-wrap gap-4">
+        <Stat label="Entró" amount={totalIncome} currency={currency} />
+        <Stat label="Se gastó" amount={totalExpenses} currency={currency} />
+        <Stat label="Quedó" amount={totalIncome - totalExpenses} currency={currency} isHighlighted />
+        <Stat label="Patrimonio hoy" amount={latest?.netWorth ?? 0} currency={currency} />
       </dl>
 
-      <section className={`${cardClass} flex flex-col gap-4`}>
-        <h2 className="font-medium">Gasto por categoría</h2>
-        {spendingBars.length === 0 ? (
-          <p className={mutedTextClass}>No hay gastos categorizados en este periodo.</p>
-        ) : (
-          <SpendingBars items={spendingBars} currency={currency} />
-        )}
-        {spending.length > spendingBars.length ? (
+      <div className="flex flex-wrap gap-5">
+        <section className={`${cardClass} flex min-w-0 flex-[1_1_420px] flex-col gap-4`}>
+          <div className="flex flex-col gap-0.5">
+            <h2 className={sectionTitleClass}>En qué se fue el dinero</h2>
+            <span className="text-[13px] text-muted">Gasto por categoría, {rangeLabel}</span>
+          </div>
+          {spendingBars.length === 0 ? (
+            <p className={mutedTextClass}>No hay gastos categorizados en este periodo.</p>
+          ) : (
+            <SpendingBars items={spendingBars} currency={currency} />
+          )}
+          {spending.length > spendingBars.length ? (
+            <details>
+              <summary className="cursor-pointer text-sm text-muted">Ver las {spending.length} categorías</summary>
+              <table className="mt-2 w-full border-collapse text-sm">
+                <thead>
+                  <tr className={tableHeaderClass}>
+                    <th className="py-2 font-semibold">Categoría</th>
+                    <th className="py-2 font-semibold">Grupo</th>
+                    <th className="py-2 text-right font-semibold">Gasto</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {spending.map((entry) => (
+                    <tr key={entry.categoryId} className="border-b border-hairline">
+                      <td className="py-1.5">{entry.name}</td>
+                      <td className="py-1.5 text-muted">{entry.groupName}</td>
+                      <td className="py-1.5 text-right"><Money amount={entry.total} currency={currency} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+          ) : null}
+        </section>
+
+        <section className={`${cardClass} flex min-w-0 flex-[1_1_420px] flex-col gap-4`}>
+          <div className="flex flex-col gap-0.5">
+            <h2 className={sectionTitleClass}>Lo que entró y lo que salió</h2>
+            <span className="text-[13px] text-muted">{compareLastMonths(cashflow, currency)}</span>
+          </div>
+          <CashflowBars months={cashflow} currency={currency} />
           <details>
-            <summary className="cursor-pointer text-sm text-neutral-600 dark:text-neutral-400">Ver las {spending.length} categorías</summary>
+            <summary className="cursor-pointer text-sm text-muted">Ver como tabla</summary>
             <table className="mt-2 w-full border-collapse text-sm">
               <thead>
                 <tr className={tableHeaderClass}>
-                  <th className="py-2 font-medium">Categoría</th>
-                  <th className="py-2 font-medium">Grupo</th>
-                  <th className="py-2 text-right font-medium">Gasto</th>
+                  <th className="py-2 font-semibold">Mes</th>
+                  <th className="py-2 text-right font-semibold">Ingresos</th>
+                  <th className="py-2 text-right font-semibold">Gastos</th>
+                  <th className="py-2 text-right font-semibold">Diferencia</th>
                 </tr>
               </thead>
               <tbody>
-                {spending.map((entry) => (
-                  <tr key={entry.categoryId} className="border-b border-neutral-100 dark:border-neutral-900">
-                    <td className="py-1.5">{entry.name}</td>
-                    <td className="py-1.5 text-neutral-500">{entry.groupName}</td>
-                    <td className="py-1.5 text-right"><Money amount={entry.total} currency={currency} /></td>
+                {cashflow.map((month) => (
+                  <tr key={month.month} className="border-b border-hairline">
+                    <td className="py-1.5 first-letter:uppercase">{formatMonthName(month.month)}</td>
+                    <td className="py-1.5 text-right"><Money amount={month.income} currency={currency} /></td>
+                    <td className="py-1.5 text-right"><Money amount={month.expenses} currency={currency} /></td>
+                    <td className="py-1.5 text-right"><Money amount={month.net} currency={currency} /></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </details>
-        ) : null}
-      </section>
+        </section>
+      </div>
 
-      <section className={`${cardClass} flex flex-col gap-4`}>
-        <h2 className="font-medium">Ingresos contra gastos</h2>
-        <CashflowBars months={cashflow} currency={currency} />
-        <details>
-          <summary className="cursor-pointer text-sm text-neutral-600 dark:text-neutral-400">Ver como tabla</summary>
-          <table className="mt-2 w-full border-collapse text-sm">
-            <thead>
-              <tr className={tableHeaderClass}>
-                <th className="py-2 font-medium">Mes</th>
-                <th className="py-2 text-right font-medium">Ingresos</th>
-                <th className="py-2 text-right font-medium">Gastos</th>
-                <th className="py-2 text-right font-medium">Diferencia</th>
-              </tr>
-            </thead>
-            <tbody>
-              {cashflow.map((month) => (
-                <tr key={month.month} className="border-b border-neutral-100 dark:border-neutral-900">
-                  <td className="py-1.5 capitalize">{formatMonthName(month.month)}</td>
-                  <td className="py-1.5 text-right"><Money amount={month.income} currency={currency} /></td>
-                  <td className="py-1.5 text-right"><Money amount={month.expenses} currency={currency} /></td>
-                  <td className="py-1.5 text-right"><Money amount={month.net} currency={currency} /></td>
+      <section className={`${cardClass} flex flex-wrap gap-6`}>
+        <div className="flex min-w-0 flex-[999_1_420px] flex-col gap-4">
+          <div className="flex flex-col gap-0.5">
+            <h2 className={sectionTitleClass}>Patrimonio</h2>
+            <span className="text-[13px] text-muted">
+              Lo que tienes menos lo que debes, al cierre de cada mes. Incluye las cuentas de seguimiento.
+            </span>
+          </div>
+          <NetWorthLine months={netWorth} currency={currency} />
+          <details>
+            <summary className="cursor-pointer text-sm text-muted">Ver como tabla</summary>
+            <table className="mt-2 w-full border-collapse text-sm">
+              <thead>
+                <tr className={tableHeaderClass}>
+                  <th className="py-2 font-semibold">Mes</th>
+                  <th className="py-2 text-right font-semibold">Lo que tienes</th>
+                  <th className="py-2 text-right font-semibold">Lo que debes</th>
+                  <th className="py-2 text-right font-semibold">Patrimonio</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </details>
-      </section>
+              </thead>
+              <tbody>
+                {netWorth.map((month) => (
+                  <tr key={month.month} className="border-b border-hairline">
+                    <td className="py-1.5 first-letter:uppercase">{formatMonthName(month.month)}</td>
+                    <td className="py-1.5 text-right"><Money amount={month.assets} currency={currency} /></td>
+                    <td className="py-1.5 text-right"><Money amount={month.debts} currency={currency} /></td>
+                    <td className="py-1.5 text-right"><Money amount={month.netWorth} currency={currency} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </details>
+        </div>
 
-      <section className={`${cardClass} flex flex-col gap-4`}>
-        <h2 className="font-medium">Patrimonio</h2>
-        <p className={mutedTextClass}>Lo que tienes menos lo que debes, al cierre de cada mes. Incluye las cuentas de seguimiento.</p>
-        <NetWorthLine months={netWorth} currency={currency} />
-        <details>
-          <summary className="cursor-pointer text-sm text-neutral-600 dark:text-neutral-400">Ver como tabla</summary>
-          <table className="mt-2 w-full border-collapse text-sm">
-            <thead>
-              <tr className={tableHeaderClass}>
-                <th className="py-2 font-medium">Mes</th>
-                <th className="py-2 text-right font-medium">Lo que tienes</th>
-                <th className="py-2 text-right font-medium">Lo que debes</th>
-                <th className="py-2 text-right font-medium">Patrimonio</th>
-              </tr>
-            </thead>
-            <tbody>
-              {netWorth.map((month) => (
-                <tr key={month.month} className="border-b border-neutral-100 dark:border-neutral-900">
-                  <td className="py-1.5 capitalize">{formatMonthName(month.month)}</td>
-                  <td className="py-1.5 text-right"><Money amount={month.assets} currency={currency} /></td>
-                  <td className="py-1.5 text-right"><Money amount={month.debts} currency={currency} /></td>
-                  <td className="py-1.5 text-right"><Money amount={month.netWorth} currency={currency} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </details>
+        <dl className="grid flex-[1_1_240px] grid-cols-[1fr_auto] content-center gap-x-4 gap-y-3">
+          <dt className="text-muted">Lo que tienes</dt>
+          <dd className="text-right"><Money amount={latest?.assets ?? 0} currency={currency} /></dd>
+          <dt className="text-muted">Lo que debes</dt>
+          <dd className="text-right text-warn-ink"><Money amount={-(latest?.debts ?? 0)} currency={currency} /></dd>
+          <dt className="border-t border-line pt-3 font-semibold">Patrimonio</dt>
+          <dd className="border-t border-line pt-3 text-right font-semibold"><Money amount={latest?.netWorth ?? 0} currency={currency} /></dd>
+          {latest && previous ? (
+            <>
+              <dt className="text-muted">Cambio desde {formatMonthWord(previous.month)}</dt>
+              <dd className={`text-right font-semibold ${latest.netWorth - previous.netWorth < 0 ? "text-warn-ink" : "text-accent-strong"}`}>
+                {latest.netWorth - previous.netWorth > 0 ? "+" : ""}
+                <Money amount={latest.netWorth - previous.netWorth} currency={currency} />
+              </dd>
+            </>
+          ) : null}
+        </dl>
       </section>
     </>
   );
 }
 
-function Stat({ label, amount, currency }: { label: string; amount: number; currency: CurrencySettings }) {
+function Stat({
+  label,
+  amount,
+  currency,
+  isHighlighted = false,
+}: {
+  label: string;
+  amount: number;
+  currency: CurrencySettings;
+  isHighlighted?: boolean;
+}) {
+  const tone = !isHighlighted ? "" : amount < 0 ? "text-warn-ink" : "text-accent";
   return (
-    <div className="rounded-lg border border-neutral-200 px-3 py-2 dark:border-neutral-800">
-      <dt className="text-xs text-neutral-500">{label}</dt>
-      <dd className="text-lg font-semibold">
+    <div className="flex-[1_1_200px] rounded-[14px] border border-line bg-surface px-5 py-4">
+      <dt className="text-[13px] font-medium text-muted">{label}</dt>
+      <dd className={`mt-0.5 ${statValueClass} ${tone}`}>
         <Money amount={amount} currency={currency} />
       </dd>
     </div>
   );
+}
+
+/** One sentence comparing spending of the last two months of the range. */
+function compareLastMonths(cashflow: MonthCashflow[], currency: CurrencySettings): string {
+  const latest = cashflow.at(-1);
+  const previous = cashflow.at(-2);
+  if (!latest || !previous) {
+    return "Ingresos y gastos por mes";
+  }
+  const difference = latest.expenses - previous.expenses;
+  const months = `En ${formatMonthWord(latest.month)} gastaste`;
+  if (difference === 0) {
+    return `${months} lo mismo que en ${formatMonthWord(previous.month)}`;
+  }
+  return `${months} ${formatMilliunits(Math.abs(difference), currency)} ${difference > 0 ? "más" : "menos"} que en ${formatMonthWord(previous.month)}`;
 }
 
 /** Keeps the largest categories as bars and folds the rest into a single "Otras" bar. */

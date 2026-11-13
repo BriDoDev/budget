@@ -20,8 +20,8 @@ type Props = PageProps<"/budgets/[budgetId]/categories">;
 export default function CategoriesPage({ params }: Props) {
   return (
     <main className={pageClass}>
-      <h1 className="text-2xl font-semibold">Categorías y metas</h1>
-      <Suspense fallback={<p className="text-neutral-500">Cargando categorías…</p>}>
+      <h1 className="font-display text-[28px] leading-tight font-semibold">Categorías y metas</h1>
+      <Suspense fallback={<p className="text-muted">Cargando categorías…</p>}>
         <CategoryManager params={params} />
       </Suspense>
     </main>
@@ -92,7 +92,7 @@ function GroupCard({
       <header className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-medium">
           {groupLabel(group.name)}
-          {group.hidden ? <span className="ml-2 text-xs font-normal text-neutral-500">Oculto</span> : null}
+          {group.hidden ? <span className="ml-2 text-xs font-normal text-muted">Oculto</span> : null}
         </h2>
         <MoveButtons kind="group" id={group.id} isFirst={isFirst} isLast={isLast} label={groupLabel(group.name)} />
       </header>
@@ -121,18 +121,18 @@ function GroupCard({
         </details>
       )}
 
-      <ul className="flex flex-col divide-y divide-neutral-100 dark:divide-neutral-900">
+      <ul className="flex flex-col divide-y divide-line">
         {categories.map((category, index) => (
           <li key={category.id} className="py-2">
             <details>
               <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2">
                 <span>
                   {category.name}
-                  {category.hidden ? <span className="ml-2 text-xs text-neutral-500">Oculta</span> : null}
-                  <span className="block text-xs text-neutral-500">{describeGoal(category, currency) ?? "Sin meta"}</span>
+                  {category.hidden ? <span className="ml-2 text-xs text-muted">Oculta</span> : null}
+                  <span className="block text-xs text-muted">{describeGoal(category, currency) ?? "Sin meta"}</span>
                 </span>
                 <span className="flex items-center gap-3">
-                  <span className="text-xs text-neutral-500 underline underline-offset-4">Editar</span>
+                  <span className="text-xs text-muted underline underline-offset-4">Editar</span>
                   <MoveButtons kind="category" id={category.id} isFirst={index === 0} isLast={index === categories.length - 1} label={category.name} />
                 </span>
               </summary>
@@ -198,7 +198,7 @@ function MoveButtons({
   isLast: boolean;
   label: string;
 }) {
-  const buttonClass = "rounded px-1.5 py-0.5 text-sm hover:bg-neutral-100 disabled:opacity-30 dark:hover:bg-neutral-800";
+  const buttonClass = "rounded px-1.5 py-0.5 text-sm hover:bg-subtle disabled:opacity-30";
   return (
     <form action={moveSortable} className="flex gap-1">
       <input type="hidden" name="kind" value={kind} />

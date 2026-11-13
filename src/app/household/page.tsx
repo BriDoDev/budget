@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { createBudget, createHousehold, inviteMember, revokeInvite, syncFromYnab } from "@/app/actions/household";
+import { createBudget, createHousehold, inviteMember, revokeInvite, startFresh, syncFromYnab } from "@/app/actions/household";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { cardClass, inputClass, labelClass, linkButtonClass, mutedTextClass, pageClass, secondaryButtonClass } from "@/components/ui";
 import { listBudgets, type BudgetSummary } from "@/lib/data/budgets";
@@ -13,10 +13,10 @@ export default function HouseholdPage() {
   return (
     <main className={pageClass}>
       <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Hogar</h1>
+        <h1 className="font-display text-[28px] leading-tight font-semibold">Hogar</h1>
         <Link href="/" className={linkButtonClass}>← Presupuestos</Link>
       </header>
-      <Suspense fallback={<p className="text-neutral-500">Cargando tu hogar…</p>}>
+      <Suspense fallback={<p className="text-muted">Cargando tu hogar…</p>}>
         <Households />
       </Suspense>
     </main>
@@ -75,7 +75,7 @@ function HouseholdCard({
 
   return (
     <div className="flex flex-col gap-4">
-      <h2 className="text-lg font-medium">{household.name}</h2>
+      <h2 className="font-display text-lg font-semibold">{household.name}</h2>
 
       <section className={`${cardClass} flex flex-col gap-3`}>
         <h3 className="text-sm font-medium">Personas</h3>
@@ -83,13 +83,13 @@ function HouseholdCard({
           {people.map((person) => (
             <li key={person.user_id} className="flex items-center justify-between gap-3">
               <span>{person.email}</span>
-              <span className="text-xs text-neutral-500">{person.role === "owner" ? "Creó el hogar" : "Integrante"}</span>
+              <span className="text-xs text-muted">{person.role === "owner" ? "Creó el hogar" : "Integrante"}</span>
             </li>
           ))}
           {invites.map((invite) => (
             <li key={invite.email} className="flex items-center justify-between gap-3">
               <span>
-                {invite.email} <span className="text-xs text-neutral-500">· invitación pendiente</span>
+                {invite.email} <span className="text-xs text-muted">· invitación pendiente</span>
               </span>
               <form action={revokeInvite}>
                 <input type="hidden" name="householdId" value={household.id} />
@@ -108,7 +108,7 @@ function HouseholdCard({
             </label>
             <SubmitButton className={secondaryButtonClass} pendingLabel="Invitando…">Invitar</SubmitButton>
           </div>
-          <p className="text-xs text-neutral-500">
+          <p className="text-xs text-muted">
             La persona entra con ese correo desde la pantalla de inicio de sesión y queda dentro del hogar.
           </p>
         </ActionForm>
@@ -119,11 +119,32 @@ function HouseholdCard({
         {budgets.length === 0 ? (
           <p className={mutedTextClass}>Todavía no hay presupuestos en este hogar.</p>
         ) : (
-          <ul className="flex flex-col gap-1 text-sm">
+          <ul className="flex flex-col divide-y divide-line text-sm">
             {budgets.map((budget) => (
-              <li key={budget.id}>
-                <Link href={`/budgets/${budget.id}`} className="underline underline-offset-4">{budget.name}</Link>
-                <span className="ml-2 text-xs text-neutral-500">{budget.currency_iso_code}</span>
+              <li key={budget.id} className="flex flex-col gap-2 py-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    <Link href={`/budgets/${budget.id}`} className="font-medium underline underline-offset-4">{budget.name}</Link>
+                    <span className="ml-2 text-xs text-muted">{budget.currency_iso_code}</span>
+                  </span>
+                </div>
+                <details>
+                  <summary className={`${linkButtonClass} cursor-pointer`}>Empezar de cero a partir de este presupuesto</summary>
+                  <ActionForm action={startFresh} className="mt-2 flex flex-col gap-2">
+                    <input type="hidden" name="budgetId" value={budget.id} />
+                    <p className={mutedTextClass}>
+                      Crea un presupuesto nuevo con las mismas cuentas (con su saldo de hoy), categorías, metas y
+                      programadas, sin historial ni asignaciones. Este presupuesto se queda como está, de archivo.
+                    </p>
+                    <div className="flex flex-wrap items-end gap-3">
+                      <label className={`${labelClass} min-w-48 flex-1`}>
+                        Nombre del presupuesto nuevo
+                        <input name="name" required defaultValue={`${budget.name} (nuevo)`} className={inputClass} />
+                      </label>
+                      <SubmitButton className={secondaryButtonClass} pendingLabel="Creando…">Empezar de cero</SubmitButton>
+                    </div>
+                  </ActionForm>
+                </details>
               </li>
             ))}
           </ul>

@@ -50,11 +50,11 @@ describe("buildLedger", () => {
       [],
     );
 
-    expect(ledger).toEqual({ activity: [], payments: [] });
+    expect(ledger).toEqual({ activity: [], payments: [], cardAdvances: [] });
   });
 
-  it("records transfers on a credit account as payments against its payment category", () => {
-    const { payments } = buildLedger(
+  it("separates card payments from cash taken out of the card", () => {
+    const { payments, cardAdvances } = buildLedger(
       accounts,
       [
         { id: "pay", accountId: "visa", date: "2026-03-05", amount: 40_000, categoryId: null, transferAccountId: "checking" },
@@ -63,9 +63,22 @@ describe("buildLedger", () => {
       [],
     );
 
-    expect(payments).toEqual([
-      { accountId: "visa", month: "2026-03-01", amount: -40_000 },
-      { accountId: "visa", month: "2026-03-01", amount: 15_000 },
-    ]);
+    expect(payments).toEqual([{ accountId: "visa", month: "2026-03-01", amount: -40_000 }]);
+    expect(cardAdvances).toEqual([{ accountId: "visa", month: "2026-03-01", amount: 15_000 }]);
+  });
+
+  it("does not count a card's starting debt as income", () => {
+    const { activity } = buildLedger(
+      accounts,
+      [
+        { id: "start", accountId: "visa", date: "2026-01-20", amount: -90_000, categoryId: "rta" },
+        { id: "cashback", accountId: "visa", date: "2026-01-25", amount: 500, categoryId: "rta" },
+        { id: "salary", accountId: "checking", date: "2026-01-30", amount: 70_000, categoryId: "rta" },
+      ],
+      [],
+      { incomeCategoryIds: new Set(["rta"]) },
+    );
+
+    expect(activity.map((line) => line.amount)).toEqual([500, 70_000]);
   });
 });

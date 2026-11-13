@@ -2,7 +2,7 @@
 
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
-import { fail, readText, readUuid, succeed, type ActionState } from "@/lib/actions/form";
+import { fail, readText, readUuid, succeed, todayIso, type ActionState } from "@/lib/actions/form";
 import { normalizeEmail } from "@/lib/auth/allowed-emails";
 import { createClient } from "@/lib/supabase/server";
 import { YnabApiError } from "@/lib/ynab/client";
@@ -43,6 +43,29 @@ export async function createBudget(previous: ActionState, formData: FormData): P
   });
   if (error || !data) {
     return fail(previous, "No se pudo crear el presupuesto.");
+  }
+  redirect(`/budgets/${data as string}`);
+}
+
+/**
+ * Starts a new budget from an existing one: same accounts (current balances as
+ * starting balances), categories, goals and scheduled transactions, without
+ * history or assignments. The source budget stays as the archive.
+ */
+export async function startFresh(previous: ActionState, formData: FormData): Promise<ActionState> {
+  const sourceBudgetId = readUuid(formData, "budgetId");
+  const name = readText(formData, "name");
+  if (!sourceBudgetId || !name) {
+    return fail(previous, "Ponle un nombre al presupuesto nuevo.");
+  }
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("fresh_start_budget", {
+    p_source_budget_id: sourceBudgetId,
+    p_name: name,
+    p_date: todayIso(),
+  });
+  if (error || !data) {
+    return fail(previous, "No se pudo crear el presupuesto nuevo.");
   }
   redirect(`/budgets/${data as string}`);
 }
