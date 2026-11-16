@@ -76,7 +76,8 @@ export async function saveTransaction(previous: ActionState, formData: FormData)
     return fail(previous, "No se pudo guardar la transacción.");
   }
 
-  if (transactionId) {
+  // The phone entry screen is a page of its own, so it leaves after saving instead of clearing the form.
+  if (transactionId || formData.get("leaveAfterSave") === "on") {
     revalidateBudgetLayout();
     redirect(readReturnPath(formData, `/budgets/${budgetId}/accounts/${accountId}`));
   }

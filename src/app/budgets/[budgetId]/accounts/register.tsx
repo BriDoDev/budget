@@ -15,6 +15,7 @@ import {
   pillWarnClass,
   primaryButtonClass,
   secondaryButtonClass,
+  sectionTitleClass,
   tableHeaderClass,
 } from "@/components/ui";
 import { accountTypeLabel } from "@/lib/accounts";
@@ -31,9 +32,10 @@ import {
   type TransactionListItem,
 } from "@/lib/data/transactions";
 import type { CategoryGroupRow, CategoryRow } from "@/lib/db/types";
-import { formatShortDate } from "@/lib/dates";
+import { formatDayTitle, formatShortDate } from "@/lib/dates";
 import { milliunitsToInput, type CurrencySettings } from "@/lib/money";
 import { SPLIT_CATEGORY, type CategoryOptionGroup, type TransactionDraft } from "@/lib/transaction-draft";
+import { AccountsOverview } from "./overview";
 import { TransactionForm } from "./transaction-form";
 
 const PAGE_STEP = 100;
@@ -71,6 +73,8 @@ export async function Register({ budgetId, accountId, searchParams }: RegisterPr
   const filter = FILTER_VALUES.find((value) => value === firstValue(searchParams.filter)) ?? "all";
   const limit = Math.min(MAX_LIMIT, Math.max(PAGE_STEP, Number(firstValue(searchParams.limit)) || PAGE_STEP));
   const editId = firstValue(searchParams.edit);
+  // Phones enter transactions on their own screen; the inline form only shows there when asked for.
+  const isFormRequested = firstValue(searchParams.form) === "1";
   const basePath = accountId ? `/budgets/${budgetId}/accounts/${accountId}` : `/budgets/${budgetId}/accounts`;
 
   const [page, counts, groups, categories, payeeNames, editing] = await Promise.all([
@@ -106,25 +110,43 @@ export async function Register({ budgetId, accountId, searchParams }: RegisterPr
           <span className={eyebrowClass}>
             {account ? `${accountTypeLabel(account.type)}${account.closed ? " · cerrada" : ""}` : "Todas las cuentas"}
           </span>
-          <h1 className={headingClass}>{account ? account.name : "Movimientos"}</h1>
+          <h1 className={headingClass}>
+            {account ? (
+              account.name
+            ) : (
+              <>
+                <span className="md:hidden">Cuentas</span>
+                <span className="hidden md:inline">Movimientos</span>
+              </>
+            )}
+          </h1>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
           {account ? <AccountActions account={account} currency={currency} /> : null}
           {openAccounts.length > 0 ? (
-            <a href="#nueva" className={primaryButtonClass}>
-              <Icon name="plus" />
-              Nueva transacción
-            </a>
+            <span className="hidden md:block">
+              <a href="#nueva" className={primaryButtonClass}>
+                <Icon name="plus" />
+                Nueva transacción
+              </a>
+            </span>
           ) : null}
         </div>
       </header>
 
-      {account ? <BalanceStrip account={account} currency={currency} unclearedCount={counts.uncleared} /> : null}
+      {account ? (
+        <BalanceStrip account={account} currency={currency} unclearedCount={counts.uncleared} />
+      ) : (
+        <AccountsOverview budgetId={budgetId} accounts={accounts} currency={currency} uncategorizedCount={counts.uncategorized} />
+      )}
 
       {openAccounts.length === 0 ? (
         <p className={mutedTextClass}>Agrega una cuenta para empezar a capturar transacciones.</p>
       ) : (
-        <section id="nueva" className="scroll-mt-4 rounded-[14px] border-2 border-accent bg-surface px-4.5 py-4">
+        <section
+          id="nueva"
+          className={`scroll-mt-4 rounded-[14px] border-2 border-accent bg-surface px-4.5 py-4 ${editing || isFormRequested ? "" : "hidden md:block"}`}
+        >
           <h2 className={`mb-3 ${eyebrowClass}`}>{editing ? "Editar transacción" : "Nueva transacción"}</h2>
           <TransactionForm
             budgetId={budgetId}
@@ -152,6 +174,8 @@ export async function Register({ budgetId, accountId, searchParams }: RegisterPr
           ) : null}
         </section>
       )}
+
+      {account ? null : <h2 className={`${sectionTitleClass} md:hidden`}>Movimientos</h2>}
 
       <div className="flex flex-wrap items-center gap-3">
         <form method="get" action={basePath} className="flex min-w-60 flex-1 items-center gap-2">
@@ -190,7 +214,16 @@ export async function Register({ budgetId, accountId, searchParams }: RegisterPr
       {page.items.length === 0 ? (
         <p className={mutedTextClass}>No hay transacciones que coincidan.</p>
       ) : (
-        <section aria-label="Movimientos" className="overflow-x-auto rounded-[14px] border border-line bg-surface">
+        <>
+        <DayList
+          items={page.items}
+          accountNames={accountNames}
+          showAccount={!account}
+          currency={currency}
+          today={todayIso()}
+          editHref={(id) => `${pathWith(filter, { edit: id })}#nueva`}
+        />
+        <section aria-label="Movimientos" className="hidden overflow-x-auto rounded-[14px] border border-line bg-surface md:block">
           <table className="w-full min-w-[46rem] border-collapse text-sm">
             <thead>
               <tr className={tableHeaderClass}>
@@ -218,6 +251,7 @@ export async function Register({ budgetId, accountId, searchParams }: RegisterPr
             </tbody>
           </table>
         </section>
+        </>
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
@@ -285,20 +319,20 @@ function BalanceStrip({
   unclearedCount: number;
 }) {
   return (
-    <section aria-label="Saldos" className="flex flex-wrap items-center gap-x-5 gap-y-3 rounded-[14px] border border-line bg-surface px-5 py-4">
+    <section aria-label="Saldos" className="flex flex-wrap items-center gap-x-5 gap-y-3 rounded-[14px] border border-line bg-surface px-5 py-4 max-md:items-end max-md:px-4">
       <div className="flex flex-col gap-0.5">
         <span className="text-[13px] text-muted">Confirmado en el banco</span>
-        <Money amount={account.clearedBalance} currency={currency} className="font-display text-[22px] font-semibold" />
+        <Money amount={account.clearedBalance} currency={currency} className="font-display text-[22px] font-semibold max-md:text-base" />
       </div>
-      <span aria-hidden="true" className="text-[22px] text-muted">+</span>
+      <span aria-hidden="true" className="text-[22px] text-muted max-md:hidden">+</span>
       <div className="flex flex-col gap-0.5">
         <span className="text-[13px] text-muted">
           Sin confirmar{unclearedCount > 0 ? ` (${unclearedCount} ${unclearedCount === 1 ? "movimiento" : "movimientos"})` : ""}
         </span>
-        <Money amount={account.unclearedBalance} currency={currency} className="font-display text-[22px] font-semibold" />
+        <Money amount={account.unclearedBalance} currency={currency} className="font-display text-[22px] font-semibold max-md:text-base" />
       </div>
-      <span aria-hidden="true" className="text-[22px] text-muted">=</span>
-      <div className="flex flex-col gap-0.5">
+      <span aria-hidden="true" className="text-[22px] text-muted max-md:hidden">=</span>
+      <div className="flex flex-col gap-0.5 max-md:order-first max-md:w-full">
         <span className="text-[13px] text-muted">Saldo de la cuenta</span>
         <Money
           amount={account.balance}
@@ -388,6 +422,84 @@ function TransactionRow({
   );
 }
 
+/** Phone layout of the list: one card per day, each transaction a row that opens it for editing. */
+function DayList({
+  items,
+  accountNames,
+  showAccount,
+  currency,
+  today,
+  editHref,
+}: {
+  items: TransactionListItem[];
+  accountNames: Map<string, string>;
+  showAccount: boolean;
+  currency: CurrencySettings;
+  today: string;
+  editHref: (transactionId: string) => string;
+}) {
+  const days = new Map<string, TransactionListItem[]>();
+  for (const item of items) {
+    days.set(item.date, [...(days.get(item.date) ?? []), item]);
+  }
+
+  return (
+    <div className="flex flex-col gap-3 md:hidden">
+      {[...days].map(([date, transactions]) => (
+        <section key={date} aria-label={formatDayTitle(date, today)} className="overflow-hidden rounded-[14px] border border-line bg-surface">
+          <div className={`flex justify-between bg-subtle px-3.5 py-2 ${eyebrowClass}`}>
+            <span>{formatDayTitle(date, today)}</span>
+            <SignedMoney amount={transactions.reduce((sum, transaction) => sum + transaction.amount, 0)} currency={currency} />
+          </div>
+          {transactions.map((transaction) => {
+            const isSplit = transaction.subtransactions.length > 0;
+            const isTransfer = Boolean(transaction.transfer_account_id);
+            const needsCategory = !isSplit && !isTransfer && !transaction.category;
+            const title = isTransfer
+              ? `Transferencia: ${accountNames.get(transaction.transfer_account_id ?? "") ?? "otra cuenta"}`
+              : (transaction.payee?.name ?? "Sin beneficiario");
+            const detail = [
+              isSplit ? "Dividida en varias categorías" : isTransfer ? "Traspaso entre cuentas" : categoryLabel(transaction.category),
+              showAccount ? accountNames.get(transaction.account_id) : null,
+              transaction.approved ? null : "Sin aprobar",
+            ].filter(Boolean);
+            return (
+              <Link
+                key={transaction.id}
+                href={editHref(transaction.id)}
+                className="flex min-h-15 items-center gap-3 border-t border-hairline px-3.5 py-2 text-[15px] active:bg-subtle"
+              >
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="truncate font-medium">{title}</span>
+                  {needsCategory ? (
+                    <span className="flex items-center gap-1 text-xs text-warn-ink">
+                      <Icon name="alert" size={13} strokeWidth={2} />
+                      {["Elige una categoría", ...detail].join(" · ")}
+                    </span>
+                  ) : (
+                    <span className="truncate text-xs text-muted">{detail.join(" · ")}</span>
+                  )}
+                </span>
+                <SignedMoney amount={transaction.amount} currency={currency} className="font-semibold" />
+              </Link>
+            );
+          })}
+        </section>
+      ))}
+    </div>
+  );
+}
+
+/** Amount with an explicit sign; money coming in is tinted so it does not rely on the sign alone. */
+function SignedMoney({ amount, currency, className = "" }: { amount: number; currency: CurrencySettings; className?: string }) {
+  return (
+    <span className={`whitespace-nowrap tabular-nums ${amount > 0 ? "text-accent-strong" : ""} ${className}`}>
+      {amount > 0 ? "+" : ""}
+      <Money amount={amount} currency={currency} />
+    </span>
+  );
+}
+
 /** Lock for reconciled rows; otherwise a toggle between pending (empty circle) and confirmed (check). */
 function ClearedControl({ transaction }: { transaction: TransactionListItem }) {
   if (transaction.cleared === "reconciled") {
@@ -418,7 +530,7 @@ function ClearedControl({ transaction }: { transaction: TransactionListItem }) {
   );
 }
 
-function toCategoryOptions(groups: CategoryGroupRow[], categories: CategoryRow[]): CategoryOptionGroup[] {
+export function toCategoryOptions(groups: CategoryGroupRow[], categories: CategoryRow[]): CategoryOptionGroup[] {
   return groups
     .filter((group) => !group.is_internal && !group.hidden)
     .map((group) => ({

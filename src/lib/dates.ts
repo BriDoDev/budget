@@ -28,3 +28,26 @@ export function formatMonthWord(month: string): string {
     new Date(`${month.slice(0, 7)}-01T00:00:00Z`),
   );
 }
+
+/** "Hoy", "Ayer" or "Viernes 13 de noviembre" for an ISO date; used to head a day of transactions. */
+export function formatDayTitle(isoDate: string, todayIsoDate: string): string {
+  const day = isoDate.slice(0, 10);
+  if (day === todayIsoDate) {
+    return "Hoy";
+  }
+  const date = new Date(`${day}T00:00:00Z`);
+  const today = new Date(`${todayIsoDate}T00:00:00Z`);
+  if (today.getTime() - date.getTime() === 24 * 60 * 60 * 1000) {
+    return "Ayer";
+  }
+  const label = new Intl.DateTimeFormat(LOCALE, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: date.getUTCFullYear() === today.getUTCFullYear() ? undefined : "numeric",
+    timeZone: "UTC",
+  })
+    .format(date)
+    .replace(",", "");
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}

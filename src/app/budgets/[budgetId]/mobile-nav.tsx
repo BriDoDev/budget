@@ -24,7 +24,7 @@ export function MobileNav({ budgetId }: { budgetId: string }) {
       {tab(base, "Presupuesto", "budget", true)}
       {tab(`${base}/accounts`, "Cuentas", "list")}
       <Link
-        href={`${base}/accounts#nueva`}
+        href={`${base}/new`}
         aria-label="Nueva transacción"
         className="flex size-13 items-center justify-center justify-self-center rounded-full bg-accent text-white"
       >

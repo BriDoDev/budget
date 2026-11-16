@@ -24,7 +24,7 @@ import {
 } from "@/components/ui";
 import type { BudgetMonthView, CategoryLine } from "@/lib/budget-view";
 import { describeGoal, groupLabel } from "@/lib/categories";
-import { getBudgetMonthView, listCategoryMonthActivity, type CategoryActivityItem } from "@/lib/data/budgets";
+import { getBudgetMonthView, listAssignments, listCategoryMonthActivity, type CategoryActivityItem } from "@/lib/data/budgets";
 import { listAccounts, listCategories } from "@/lib/data/core";
 import { formatMonthTitle, formatMonthWord, formatShortDate } from "@/lib/dates";
 import { formatMilliunits, milliunitsToInput, type CurrencySettings } from "@/lib/money";
@@ -119,13 +119,13 @@ function MonthHeader({ view }: { view: BudgetMonthView }) {
 
   return (
     <header className="flex flex-wrap items-center justify-between gap-4">
-      <div className="flex flex-wrap items-center gap-4">
-        <h1 className={headingClass}>Presupuesto</h1>
-        <nav aria-label="Mes" className="flex items-center gap-1 rounded-[10px] border border-line bg-surface px-1">
+      <div className="flex flex-wrap items-center gap-4 max-md:w-full">
+        <h1 className={`${headingClass} max-md:sr-only`}>Presupuesto</h1>
+        <nav aria-label="Mes" className="flex items-center gap-1 rounded-[10px] border border-line bg-surface px-1 max-md:w-full">
           <Link href={budgetHref(budget.id, view.previousMonth)} aria-label="Mes anterior" className="flex size-11 items-center justify-center rounded-lg text-ink-soft hover:bg-subtle">
             <Icon name="chevronLeft" />
           </Link>
-          <span className="min-w-36 text-center font-semibold">{formatMonthTitle(view.month)}</span>
+          <span className="min-w-36 flex-1 text-center font-semibold">{formatMonthTitle(view.month)}</span>
           <Link href={budgetHref(budget.id, view.nextMonth)} aria-label="Mes siguiente" className="flex size-11 items-center justify-center rounded-lg text-ink-soft hover:bg-subtle">
             <Icon name="chevronRight" />
           </Link>
@@ -229,11 +229,11 @@ function Summary({ view }: { view: BudgetMonthView }) {
             {attentionCategories === 1 ? "1 categoría necesita atención" : `${attentionCategories} categorías necesitan atención`}
           </span>
           {attention.slice(0, MAX_ATTENTION_ITEMS).map((item) => (
-            <Link key={item.categoryId + item.text} href={`${budgetHref(view.budget.id, view.month, item.categoryId)}#detalle`} className="underline underline-offset-2">
+            <Link key={item.categoryId + item.text} href={`${budgetHref(view.budget.id, view.month, item.categoryId)}#detalle`} className="underline underline-offset-2 max-md:hidden">
               {item.text}
             </Link>
           ))}
-          {attention.length > MAX_ATTENTION_ITEMS ? <span>y {attention.length - MAX_ATTENTION_ITEMS} más</span> : null}
+          {attention.length > MAX_ATTENTION_ITEMS ? <span className="max-md:hidden">y {attention.length - MAX_ATTENTION_ITEMS} más</span> : null}
         </div>
       ) : (
         <div className="flex flex-[1.3_1_240px] flex-col justify-center gap-1 rounded-[14px] border border-line bg-surface px-5 py-4">
@@ -320,7 +320,11 @@ function CategoryTable({
                     />
                   </td>
                   <td className="hidden px-2 py-2.5 text-right sm:table-cell"><Money amount={category.activity} currency={currency} /></td>
-                  <td className="px-4 py-2.5 text-right"><AvailablePill category={category} currency={currency} /></td>
+                  <td className="px-4 py-2.5 text-right">
+                    <Link href={`${budgetHref(view.budget.id, view.month, category.id)}#detalle`} aria-label={`Disponible en ${category.name}`}>
+                      <AvailablePill category={category} currency={currency} />
+                    </Link>
+                  </td>
                 </tr>
               );
             })}
@@ -346,20 +350,49 @@ async function CategoryDetail({
 }) {
   const { budget } = view;
   const { currency } = budget;
-  const [activity, rows] = await Promise.all([
+  const [activity, rows, assignments] = await Promise.all([
     listCategoryMonthActivity(budget.id, category.id, view.month, view.nextMonth),
     listCategories(budget.id),
+    listAssignments(budget.id),
   ]);
+  const closeHref = budgetHref(budget.id, view.month);
+  const overspent = -(category.cashOverspent + category.creditOverspent);
+  const lastMonthAssigned =
+    assignments.find((entry) => entry.category_id === category.id && entry.month === view.previousMonth)?.amount ?? 0;
+  const shortcuts = [
+    overspent > 0 ? { label: "Cubrir lo que se pasó", amount: category.assigned + overspent, isWarning: true } : null,
+    lastMonthAssigned > 0 && lastMonthAssigned !== category.assigned
+      ? { label: `Igual que ${formatMonthWord(view.previousMonth)}`, amount: lastMonthAssigned, isWarning: false }
+      : null,
+  ].filter((shortcut) => shortcut !== null);
   const row = rows.find((candidate) => candidate.id === category.id);
   const goalText = row ? describeGoal(row, currency) : null;
   const missing = category.goal?.underfunded ?? 0;
 
   return (
-    <aside id="detalle" aria-label={`Detalle de ${category.name}`} className={`${cardClass} flex flex-[1_1_300px] scroll-mt-4 flex-col gap-4`}>
-      <div className="flex flex-col gap-0.5">
-        <span className={eyebrowClass}>{groupName}</span>
-        <h2 className="font-display text-[22px] font-semibold">{category.name}</h2>
-        {status?.caption ? <span className={`text-sm ${status.isWarning ? "text-warn-ink" : "text-muted"}`}>{status.caption}</span> : null}
+    <>
+    {/* On phones the detail is a sheet over the list; touching outside it closes it. */}
+    <Link href={closeHref} scroll={false} aria-label="Cerrar detalle" className="fixed inset-0 z-30 bg-ink/45 md:hidden" />
+    <aside
+      id="detalle"
+      aria-label={`Detalle de ${category.name}`}
+      className={`${cardClass} flex flex-[1_1_300px] scroll-mt-4 flex-col gap-4 max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-40 max-md:max-h-[88dvh] max-md:overflow-y-auto max-md:rounded-t-[22px] max-md:rounded-b-none max-md:border-0 max-md:pt-2.5 max-md:pb-8 max-md:shadow-2xl`}
+    >
+      <span aria-hidden="true" className="h-1 w-10 shrink-0 self-center rounded-full bg-line-strong md:hidden" />
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className={eyebrowClass}>{groupName}</span>
+          <h2 className="font-display text-[22px] font-semibold">{category.name}</h2>
+          {status?.caption ? <span className={`text-sm ${status.isWarning ? "text-warn-ink" : "text-muted"}`}>{status.caption}</span> : null}
+        </div>
+        <Link
+          href={closeHref}
+          scroll={false}
+          aria-label="Cerrar detalle"
+          className="-mt-1 -mr-2 flex size-11 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-subtle md:hidden"
+        >
+          <Icon name="close" size={20} />
+        </Link>
       </div>
 
       {category.goal && goalText ? (
@@ -410,6 +443,30 @@ async function CategoryDetail({
         <dd className="border-t border-line pt-2.5 text-right font-semibold"><Money amount={category.available} currency={currency} /></dd>
       </dl>
 
+      {shortcuts.length > 0 ? (
+        <div className="flex flex-col gap-2">
+          <span className={eyebrowClass}>Atajos para asignar</span>
+          <div className="grid grid-cols-2 gap-2">
+            {shortcuts.map((shortcut) => (
+              <ActionForm key={shortcut.label} action={setAssignment} className="flex flex-col">
+                <input type="hidden" name="budgetId" value={budget.id} />
+                <input type="hidden" name="categoryId" value={category.id} />
+                <input type="hidden" name="month" value={view.month} />
+                <input type="hidden" name="amount" value={milliunitsToInput(shortcut.amount, 3)} />
+                <SubmitButton
+                  className={`flex min-h-13 w-full cursor-pointer flex-col justify-center rounded-xl border px-3 py-1.5 text-left disabled:opacity-60 ${
+                    shortcut.isWarning ? "border-warn-line bg-warn-softer text-warn-deep" : "border-line bg-surface text-ink hover:bg-subtle"
+                  }`}
+                >
+                  <span className="text-xs">{shortcut.label}</span>
+                  <span className="font-semibold tabular-nums">{formatMilliunits(shortcut.amount, currency)}</span>
+                </SubmitButton>
+              </ActionForm>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {category.kind === "standard" ? (
         <div className="flex flex-col gap-2">
           <span className={eyebrowClass}>Movimientos del mes</span>
@@ -430,9 +487,10 @@ async function CategoryDetail({
 
       <div className="flex flex-wrap justify-between gap-3 border-t border-line pt-3">
         <Link href={`/budgets/${budget.id}/categories`} className={linkButtonClass}>Editar categoría</Link>
-        <Link href={budgetHref(budget.id, view.month)} className={linkButtonClass}>Cerrar detalle</Link>
+        <Link href={closeHref} scroll={false} className={linkButtonClass}>Cerrar detalle</Link>
       </div>
     </aside>
+    </>
   );
 }
 
