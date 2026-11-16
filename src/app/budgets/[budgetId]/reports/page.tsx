@@ -92,7 +92,7 @@ async function Reports({ params, searchParams }: Pick<Props, "params" | "searchP
               key={option}
               href={`/budgets/${budgetId}/reports?months=${option}`}
               aria-current={option === period ? "true" : undefined}
-              className={`flex min-h-10 items-center rounded-lg px-4 text-sm ${
+              className={`flex min-h-10 items-center rounded-lg px-3 text-sm whitespace-nowrap sm:px-4 ${
                 option === period ? "bg-accent font-semibold text-white" : "font-medium text-ink-soft hover:bg-subtle"
               }`}
             >
@@ -246,9 +246,9 @@ function Stat({
 }) {
   const tone = !isHighlighted ? "" : amount < 0 ? "text-warn-ink" : "text-accent";
   return (
-    <div className="flex-[1_1_200px] rounded-[14px] border border-line bg-surface px-5 py-4">
+    <div className="min-w-0 flex-[1_1_140px] rounded-[14px] border border-line bg-surface px-4 py-3.5 sm:flex-[1_1_200px] sm:px-5 sm:py-4">
       <dt className="text-[13px] font-medium text-muted">{label}</dt>
-      <dd className={`mt-0.5 ${statValueClass} ${tone}`}>
+      <dd className={`mt-0.5 ${statValueClass} max-sm:text-lg ${tone}`}>
         <Money amount={amount} currency={currency} />
       </dd>
     </div>

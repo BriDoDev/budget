@@ -105,7 +105,7 @@ export async function Register({ budgetId, accountId, searchParams }: RegisterPr
 
   return (
     <>
-      <header className="flex flex-wrap items-end justify-between gap-4">
+      <header className="relative flex flex-wrap items-end justify-between gap-4">
         <div className="flex flex-col gap-1">
           <span className={eyebrowClass}>
             {account ? `${accountTypeLabel(account.type)}${account.closed ? " · cerrada" : ""}` : "Todas las cuentas"}
@@ -277,12 +277,12 @@ function AccountActions({ account, currency }: { account: AccountWithBalance; cu
         <input type="hidden" name="closed" value={account.closed ? "false" : "true"} />
         <SubmitButton className={`${linkButtonClass} px-2`}>{account.closed ? "Reabrir cuenta" : "Cerrar cuenta"}</SubmitButton>
       </form>
-      <details className="relative">
+      <details className="md:relative">
         <summary className={`${secondaryButtonClass} list-none`}>
           <Icon name="lock" />
           Conciliar con el banco
         </summary>
-        <div className="absolute right-0 z-10 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-[14px] border border-line bg-surface p-4 shadow-lg">
+        <div className="absolute right-0 z-10 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-[14px] border border-line bg-surface p-4 shadow-lg max-md:inset-x-0 max-md:w-auto">
           <ActionForm action={reconcileAccount} className="flex flex-col gap-3">
             <input type="hidden" name="accountId" value={account.id} />
             <input type="hidden" name="currency" value={currency.isoCode} />

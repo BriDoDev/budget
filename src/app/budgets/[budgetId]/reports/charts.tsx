@@ -92,7 +92,11 @@ function MonthAxis({ months, isEdgeAligned = false }: { months: string[]; isEdge
       style={isEdgeAligned ? undefined : { gridTemplateColumns: `repeat(${months.length}, minmax(0, 1fr))` }}
     >
       {months.map((month) => (
-        <span key={month} className="text-center">{monthLabel(month, format)}</span>
+        <span key={month} className="text-center">
+          {/* Full month names collide on a phone, so it always gets the short form. */}
+          <span className="sm:hidden">{monthLabel(month, "short")}</span>
+          <span className="hidden sm:inline">{monthLabel(month, format)}</span>
+        </span>
       ))}
     </div>
   );
@@ -169,7 +173,7 @@ export function CashflowBars({ months, currency }: { months: MonthCashflow[]; cu
                 className={`flex items-end justify-center gap-0.5 px-1 outline-none ${active === index ? "bg-subtle/80" : ""}`}
               >
                 {isEmpty ? (
-                  showLabels ? <span className="pb-2 text-xs text-muted">Sin movimientos</span> : null
+                  showLabels ? <span className="pb-2 text-xs text-muted max-sm:hidden">Sin movimientos</span> : null
                 ) : (
                   <>
                     {bar(month.income, "bg-(--viz-series-1)")}

@@ -118,7 +118,7 @@ function MonthHeader({ view }: { view: BudgetMonthView }) {
   ));
 
   return (
-    <header className="flex flex-wrap items-center justify-between gap-4">
+    <header className="relative flex flex-wrap items-center justify-between gap-4">
       <div className="flex flex-wrap items-center gap-4 max-md:w-full">
         <h1 className={`${headingClass} max-md:sr-only`}>Presupuesto</h1>
         <nav aria-label="Mes" className="flex items-center gap-1 rounded-[10px] border border-line bg-surface px-1 max-md:w-full">
@@ -133,12 +133,12 @@ function MonthHeader({ view }: { view: BudgetMonthView }) {
       </div>
 
       <div className="flex flex-wrap items-start gap-2.5">
-        <details className="relative">
+        <details className="md:relative">
           <summary className={`${secondaryButtonClass} list-none`}>
             <Icon name="swap" />
             Mover dinero
           </summary>
-          <div className="absolute right-0 z-10 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-[14px] border border-line bg-surface p-4 shadow-lg">
+          <div className="absolute right-0 z-10 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-[14px] border border-line bg-surface p-4 shadow-lg max-md:inset-x-0 max-md:w-auto">
             <ActionForm action={moveMoney} className="flex flex-col gap-3">
               <input type="hidden" name="budgetId" value={budget.id} />
               <input type="hidden" name="month" value={view.month} />
