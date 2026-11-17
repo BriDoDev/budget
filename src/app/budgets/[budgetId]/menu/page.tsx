@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { SidebarSkeleton } from "@/components/skeleton";
 import { BudgetSidebar } from "../sidebar";
 
 type Props = PageProps<"/budgets/[budgetId]/menu">;
@@ -7,7 +8,7 @@ type Props = PageProps<"/budgets/[budgetId]/menu">;
 export default function MenuPage({ params }: Props) {
   return (
     <main className="mx-auto w-full max-w-md pb-28">
-      <Suspense fallback={<p className="p-5 text-sm text-muted">Cargando…</p>}>
+      <Suspense fallback={<SidebarSkeleton />}>
         <Menu params={params} />
       </Suspense>
     </main>

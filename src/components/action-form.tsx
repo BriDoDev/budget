@@ -3,6 +3,7 @@
 import { useActionState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import { IDLE_STATE, type ActionState } from "@/lib/actions/form";
+import { Icon } from "./icons";
 import { primaryButtonClass } from "./ui";
 
 type FormAction = (previous: ActionState, formData: FormData) => Promise<ActionState>;
@@ -44,12 +45,33 @@ interface SubmitButtonProps {
   "aria-label"?: string;
 }
 
-/** Submit button that disables itself while its form is being sent. */
+/**
+ * Submit button that disables itself while its form is being sent. With a
+ * pending label it shows a spinner next to it; without one it keeps its
+ * content and pulses, so icon and link buttons do not change size.
+ */
 export function SubmitButton({ children, className = primaryButtonClass, pendingLabel, ...rest }: SubmitButtonProps) {
   const { pending } = useFormStatus();
+  const isPulsing = pending && !pendingLabel;
   return (
-    <button type="submit" disabled={pending} className={className} {...rest}>
-      {pending && pendingLabel ? pendingLabel : children}
+    <button
+      type="submit"
+      disabled={pending}
+      aria-busy={pending}
+      className={`${className} ${isPulsing ? "animate-pulse motion-reduce:animate-none" : ""}`}
+      {...rest}
+    >
+      {pending && pendingLabel ? <PendingLabel>{pendingLabel}</PendingLabel> : children}
     </button>
+  );
+}
+
+/** Spinner followed by what is happening, for buttons that manage their own pending state. */
+export function PendingLabel({ children }: { children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center justify-center gap-2">
+      <Icon name="spinner" size={16} strokeWidth={2.25} className="animate-spin motion-reduce:animate-none" />
+      {children}
+    </span>
   );
 }

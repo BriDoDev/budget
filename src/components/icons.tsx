@@ -55,6 +55,7 @@ const ICON_PATHS = {
   more: <path d="M5 12h.01M12 12h.01M19 12h.01" />,
   close: <path d="M6 6l12 12M18 6L6 18" />,
   card: <path d="M3 6h18v12H3zM3 10h18" />,
+  spinner: <path d="M12 3a9 9 0 109 9" />,
 } satisfies Record<string, ReactNode>;
 
 export type IconName = keyof typeof ICON_PATHS;

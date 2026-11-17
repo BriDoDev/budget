@@ -1,8 +1,9 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/app-link";
 import { useActionState, useState, type ReactNode } from "react";
 import { saveTransaction } from "@/app/actions/transactions";
+import { PendingLabel } from "@/components/action-form";
 import { Icon, type IconName } from "@/components/icons";
 import { linkButtonClass, pillNeutralClass, pillPositiveClass, pillWarnClass } from "@/components/ui";
 import { IDLE_STATE } from "@/lib/actions/form";
@@ -199,7 +200,7 @@ export function QuickTransactionForm({
         disabled={isPending}
         className="min-h-14 cursor-pointer rounded-2xl bg-accent text-base font-semibold text-white hover:brightness-110 disabled:opacity-60"
       >
-        {isPending ? "Guardando…" : submitLabel}
+        {isPending ? <PendingLabel>Guardando…</PendingLabel> : submitLabel}
       </button>
 
       <Link href={fullFormHref} className={`${linkButtonClass} flex min-h-11 items-center justify-center`}>

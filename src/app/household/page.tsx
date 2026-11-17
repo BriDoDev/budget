@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import Link from "@/components/app-link";
 import { Suspense } from "react";
 import { createBudget, createHousehold, inviteMember, revokeInvite, startFresh, syncFromYnab } from "@/app/actions/household";
 import { ActionForm, SubmitButton } from "@/components/action-form";
+import { ListSkeleton } from "@/components/skeleton";
 import { cardClass, inputClass, labelClass, linkButtonClass, mutedTextClass, pageClass, secondaryButtonClass } from "@/components/ui";
 import { listBudgets, type BudgetSummary } from "@/lib/data/budgets";
 import { getHouseholdOverview, listHouseholds, type HouseholdOverview } from "@/lib/data/household";
@@ -16,7 +17,7 @@ export default function HouseholdPage() {
         <h1 className="font-display text-[28px] leading-tight font-semibold">Hogar</h1>
         <Link href="/" className={linkButtonClass}>← Presupuestos</Link>
       </header>
-      <Suspense fallback={<p className="text-muted">Cargando tu hogar…</p>}>
+      <Suspense fallback={<ListSkeleton label="Cargando tu hogar…" />}>
         <Households />
       </Suspense>
     </main>

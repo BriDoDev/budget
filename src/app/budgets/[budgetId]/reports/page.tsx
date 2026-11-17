@@ -1,7 +1,8 @@
-import Link from "next/link";
+import Link from "@/components/app-link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { Money } from "@/components/money";
+import { ReportsSkeleton } from "@/components/skeleton";
 import { cardClass, headingClass, mutedTextClass, pageClass, sectionTitleClass, statValueClass, tableHeaderClass } from "@/components/ui";
 import { formatMonthName, groupLabel } from "@/lib/categories";
 import { fetchAccountMonthTotals, fetchActivity, getBudget, listCategories, listCategoryGroups } from "@/lib/data/core";
@@ -27,7 +28,7 @@ const MAX_CATEGORY_BARS = 10;
 export default function ReportsPage({ params, searchParams }: Props) {
   return (
     <main className={pageClass}>
-      <Suspense fallback={<p className={mutedTextClass}>Calculando reportes…</p>}>
+      <Suspense fallback={<ReportsSkeleton />}>
         <Reports params={params} searchParams={searchParams} />
       </Suspense>
     </main>

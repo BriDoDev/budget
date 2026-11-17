@@ -1,8 +1,9 @@
-import Link from "next/link";
+import Link from "@/components/app-link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { Icon } from "@/components/icons";
+import { QuickFormSkeleton } from "@/components/skeleton";
 import { mutedTextClass } from "@/components/ui";
 import { todayIso } from "@/lib/actions/form";
 import { getBudgetMonthView } from "@/lib/data/budgets";
@@ -20,7 +21,7 @@ const KINDS: TransactionKind[] = ["expense", "income", "transfer"];
 export default function NewTransactionPage({ params, searchParams }: Props) {
   return (
     <main className="mx-auto flex w-full max-w-md flex-col gap-4 px-4 pt-3 pb-28 md:pt-7 md:pb-8">
-      <Suspense fallback={<p className={mutedTextClass}>Cargando…</p>}>
+      <Suspense fallback={<QuickFormSkeleton />}>
         <NewTransaction params={params} searchParams={searchParams} />
       </Suspense>
     </main>

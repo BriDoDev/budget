@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/app-link";
 import { Icon, type IconName } from "@/components/icons";
 import { NavLink } from "@/components/nav-link";
 

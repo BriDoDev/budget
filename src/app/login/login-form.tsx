@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { PendingLabel } from "@/components/action-form";
 import { requestMagicLink, type MagicLinkState } from "./actions";
 
 const INITIAL_STATE: MagicLinkState = { status: "idle", message: "" };
@@ -26,7 +27,7 @@ export function LoginForm() {
         disabled={isPending}
         className="min-h-11 cursor-pointer rounded-[10px] bg-accent px-4 font-semibold text-white hover:brightness-110 disabled:opacity-60"
       >
-        {isPending ? "Enviando…" : "Enviar enlace de acceso"}
+        {isPending ? <PendingLabel>Enviando…</PendingLabel> : "Enviar enlace de acceso"}
       </button>
       {state.message ? (
         <p role="status" className={state.status === "error" ? "text-sm text-red-700" : "text-sm text-muted"}>

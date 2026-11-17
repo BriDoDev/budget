@@ -7,6 +7,7 @@ import {
 } from "@/app/actions/scheduled";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { Money } from "@/components/money";
+import { ListSkeleton } from "@/components/skeleton";
 import { cardClass, inputClass, labelClass, linkButtonClass, mutedTextClass, pageClass, tableHeaderClass } from "@/components/ui";
 import { todayIso } from "@/lib/actions/form";
 import { groupLabel } from "@/lib/categories";
@@ -21,7 +22,7 @@ export default function ScheduledPage({ params }: Props) {
   return (
     <main className={pageClass}>
       <h1 className="font-display text-[28px] leading-tight font-semibold">Transacciones programadas</h1>
-      <Suspense fallback={<p className="text-muted">Cargando programadas…</p>}>
+      <Suspense fallback={<ListSkeleton label="Cargando programadas…" />}>
         <Scheduled params={params} />
       </Suspense>
     </main>

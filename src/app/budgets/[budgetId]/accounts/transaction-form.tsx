@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { saveTransaction } from "@/app/actions/transactions";
+import { PendingLabel } from "@/components/action-form";
 import { inputClass, labelClass, linkButtonClass, primaryButtonClass } from "@/components/ui";
 import { IDLE_STATE } from "@/lib/actions/form";
 import { parseAmountInput } from "@/lib/money";
@@ -231,7 +232,7 @@ function TransactionFields({
           </select>
         </label>
         <button type="submit" disabled={isPending} className={`${primaryButtonClass} ml-auto`}>
-          {isPending ? "Guardando…" : initial ? "Guardar cambios" : "Agregar transacción"}
+          {isPending ? <PendingLabel>Guardando…</PendingLabel> : initial ? "Guardar cambios" : "Agregar transacción"}
         </button>
       </div>
     </>

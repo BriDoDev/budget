@@ -8,6 +8,7 @@ import {
   updateCategoryGroup,
 } from "@/app/actions/categories";
 import { ActionForm, SubmitButton } from "@/components/action-form";
+import { ListSkeleton } from "@/components/skeleton";
 import { cardClass, inputClass, labelClass, linkButtonClass, mutedTextClass, pageClass, secondaryButtonClass } from "@/components/ui";
 import { CREDIT_CARD_PAYMENTS_GROUP, describeGoal, groupLabel } from "@/lib/categories";
 import { getBudget, listCategories, listCategoryGroups } from "@/lib/data/core";
@@ -21,7 +22,7 @@ export default function CategoriesPage({ params }: Props) {
   return (
     <main className={pageClass}>
       <h1 className="font-display text-[28px] leading-tight font-semibold">Categorías y metas</h1>
-      <Suspense fallback={<p className="text-muted">Cargando categorías…</p>}>
+      <Suspense fallback={<ListSkeleton label="Cargando categorías…" cards={3} />}>
         <CategoryManager params={params} />
       </Suspense>
     </main>

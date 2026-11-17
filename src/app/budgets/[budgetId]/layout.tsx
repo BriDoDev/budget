@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { MobileNavSkeleton, SidebarSkeleton } from "@/components/skeleton";
 import { MobileNav } from "./mobile-nav";
 import { BudgetSidebar } from "./sidebar";
 
@@ -8,12 +9,12 @@ export default function BudgetLayout({ children, params }: LayoutProps<"/budgets
   return (
     <div className="flex flex-1 flex-col md:flex-row">
       <aside className="hidden border-line bg-surface md:block md:w-[264px] md:shrink-0 md:border-r">
-        <Suspense fallback={<p className="p-5 text-sm text-muted">Cargando cuentas…</p>}>
+        <Suspense fallback={<SidebarSkeleton />}>
           <Sidebar params={params} />
         </Suspense>
       </aside>
       <div className="min-w-0 flex-1">{children}</div>
-      <Suspense fallback={null}>
+      <Suspense fallback={<MobileNavSkeleton />}>
         <PhoneNav params={params} />
       </Suspense>
     </div>

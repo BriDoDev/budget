@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/app-link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
@@ -6,6 +6,7 @@ import { fundGoals, moveMoney, setAssignment } from "@/app/actions/budget";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { Icon } from "@/components/icons";
 import { Money } from "@/components/money";
+import { BudgetSkeleton } from "@/components/skeleton";
 import {
   cardClass,
   eyebrowClass,
@@ -51,7 +52,7 @@ interface AttentionItem {
 export default function BudgetPage({ params, searchParams }: Props) {
   return (
     <main className={pageClass}>
-      <Suspense fallback={<p className={mutedTextClass}>Calculando el mes…</p>}>
+      <Suspense fallback={<BudgetSkeleton />}>
         <BudgetMonth params={params} searchParams={searchParams} />
       </Suspense>
     </main>

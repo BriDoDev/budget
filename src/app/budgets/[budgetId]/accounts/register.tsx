@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/app-link";
 import { notFound } from "next/navigation";
 import { setAccountClosed } from "@/app/actions/accounts";
 import { approveTransaction, deleteTransaction, reconcileAccount, setCleared } from "@/app/actions/transactions";

@@ -1,11 +1,12 @@
 import { Suspense } from "react";
+import { RegisterSkeleton } from "@/components/skeleton";
 import { pageClass } from "@/components/ui";
 import { Register } from "./register";
 
 export default function AllAccountsPage({ params, searchParams }: PageProps<"/budgets/[budgetId]/accounts">) {
   return (
     <main className={pageClass}>
-      <Suspense fallback={<p className="text-muted">Cargando movimientos…</p>}>
+      <Suspense fallback={<RegisterSkeleton isAccountsHome />}>
         <AllAccounts params={params} searchParams={searchParams} />
       </Suspense>
     </main>

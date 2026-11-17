@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/app-link";
 import { createAccount } from "@/app/actions/accounts";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { Icon, type IconName } from "@/components/icons";

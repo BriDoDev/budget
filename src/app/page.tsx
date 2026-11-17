@@ -1,5 +1,6 @@
-import Link from "next/link";
+import Link from "@/components/app-link";
 import { Suspense } from "react";
+import { ListSkeleton } from "@/components/skeleton";
 import { SignOutButton } from "@/components/sign-out-button";
 import { linkButtonClass, mutedTextClass } from "@/components/ui";
 import { listBudgets } from "@/lib/data/budgets";
@@ -15,7 +16,7 @@ export default function HomePage() {
           <SignOutButton />
         </div>
       </header>
-      <Suspense fallback={<p className="text-muted">Cargando presupuestos…</p>}>
+      <Suspense fallback={<ListSkeleton label="Cargando presupuestos…" cards={1} rows={2} />}>
         <BudgetList />
       </Suspense>
     </main>

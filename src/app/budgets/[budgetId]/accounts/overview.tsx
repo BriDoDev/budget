@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/app-link";
 import { Icon } from "@/components/icons";
 import { Money } from "@/components/money";
 import { eyebrowClass, secondaryButtonClass } from "@/components/ui";
