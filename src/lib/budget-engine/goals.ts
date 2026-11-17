@@ -101,6 +101,20 @@ export function computeGoalStatus(
   return { underfunded, monthTarget, funded, percentageComplete: percentage(funded, target) };
 }
 
+/**
+ * Month by whose end the goal has to be met: the current one for goals that
+ * repeat monthly, the end of the period for the rest. Null when there is no deadline.
+ */
+export function goalDueMonth(goal: Goal, month: MonthKey): MonthKey | null {
+  if (goal.type === "target_balance" || (goal.type === "target_balance_by_date" && !goal.targetMonth)) {
+    return null;
+  }
+  if (goal.type === "monthly_funding") {
+    return month;
+  }
+  return resolvePeriod(goal, month).end;
+}
+
 /** Period of the goal that contains `month`: the first one ends on the target month, later ones repeat by cadence. */
 function resolvePeriod(goal: Goal, month: MonthKey): { start: MonthKey; end: MonthKey } {
   if (!goal.targetMonth) {

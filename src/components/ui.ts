@@ -16,6 +16,11 @@ export const linkButtonClass =
 
 export const cardClass = "rounded-[14px] border border-line bg-surface p-5";
 
+/** Detail panel of the budget: a side card on wide screens, a bottom sheet on phones. */
+export const detailPanelClass = `${cardClass} flex flex-[1_1_300px] scroll-mt-4 flex-col gap-4 max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-40 max-md:max-h-[88dvh] max-md:overflow-y-auto max-md:rounded-t-[22px] max-md:rounded-b-none max-md:border-0 max-md:pt-2.5 max-md:pb-8 max-md:shadow-2xl`;
+
+export const detailBackdropClass = "fixed inset-0 z-30 bg-ink/45 md:hidden";
+
 export const mutedTextClass = "text-sm text-muted";
 
 export const tableHeaderClass = "border-b border-line text-left text-xs font-semibold text-muted";

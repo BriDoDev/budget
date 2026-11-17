@@ -43,9 +43,47 @@ export function milliunitsToInput(amount: number, decimalDigits = 2): string {
  * into milliunits. Returns null when the text is not a number.
  */
 export function parseAmountInput(raw: string | null | undefined): number | null {
-  const cleaned = (raw ?? "").replace(/[\s$,]/g, "");
-  if (!AMOUNT_INPUT_PATTERN.test(cleaned)) {
+  const cleaned = (raw ?? "").replace(/[\s$,]/g, "").replace(/−/g, "-");
+  if (AMOUNT_INPUT_PATTERN.test(cleaned)) {
+    return unitsToMilliunits(Number(cleaned));
+  }
+  const result = evaluateArithmetic(cleaned);
+  return result === null ? null : unitsToMilliunits(result);
+}
+
+/** True when the text is a calculation ("100+200") rather than a plain number. */
+export function hasArithmetic(raw: string): boolean {
+  return /[+*/×÷x]|.[-−]/i.test(raw.trim());
+}
+
+const ARITHMETIC_PATTERN = /^-?(\d+\.?\d*|\.\d+)([+\-*/](\d+\.?\d*|\.\d+))+$/;
+
+/**
+ * Evaluates sums like "100+200" or "1200/12-50" so nobody has to do the math
+ * before typing an amount. Multiplication and division bind tighter; there are
+ * no parentheses. Returns null for anything else, including dividing by zero.
+ */
+function evaluateArithmetic(text: string): number | null {
+  const expression = text.replace(/[×x]/gi, "*").replace(/÷/g, "/").replace(/−/g, "-");
+  if (!ARITHMETIC_PATTERN.test(expression)) {
     return null;
   }
-  return unitsToMilliunits(Number(cleaned));
+  const tokens = expression.match(/(^-)?(\d+\.?\d*|\.\d+)|[+\-*/]/g) ?? [];
+  const terms: number[] = [Number(tokens[0])];
+  for (let index = 1; index < tokens.length; index += 2) {
+    const operator = tokens[index];
+    const value = Number(tokens[index + 1]);
+    if (operator === "*") {
+      terms[terms.length - 1] *= value;
+    } else if (operator === "/") {
+      if (value === 0) {
+        return null;
+      }
+      terms[terms.length - 1] /= value;
+    } else {
+      terms.push(operator === "-" ? -value : value);
+    }
+  }
+  const total = terms.reduce((sum, term) => sum + term, 0);
+  return Number.isFinite(total) ? total : null;
 }

@@ -24,6 +24,12 @@
   --accent-strong: #17468f;
   --accent-soft: #e9eff9;
 
+  /* Money coming in and going out, used on amounts next to their sign. */
+  --income: #15803d;
+  --income-soft: #e7f6ec;
+  --expense: #b42318;
+  --expense-soft: #fdecea;
+
   --warn: #c2410c;
   --warn-ink: #8a2e0b;
   --warn-deep: #6b2408;
@@ -51,6 +57,10 @@
   --color-accent: var(--accent);
   --color-accent-strong: var(--accent-strong);
   --color-accent-soft: var(--accent-soft);
+  --color-income: var(--income);
+  --color-income-soft: var(--income-soft);
+  --color-expense: var(--expense);
+  --color-expense-soft: var(--expense-soft);
   --color-warn: var(--warn);
   --color-warn-ink: var(--warn-ink);
   --color-warn-deep: var(--warn-deep);

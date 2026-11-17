@@ -399,10 +399,14 @@ function TransactionRow({
           categoryLabel(transaction.category)
         )}
       </td>
-      <td className="px-2 py-2 text-right">
-        {transaction.amount < 0 ? <Money amount={-transaction.amount} currency={currency} /> : null}
+      <td className={`px-2 py-2 text-right ${isTransfer ? "" : "text-expense"}`}>
+        {transaction.amount < 0 ? (
+          <>
+            −<Money amount={-transaction.amount} currency={currency} />
+          </>
+        ) : null}
       </td>
-      <td className="px-2 py-2 text-right font-semibold text-accent-strong">
+      <td className={`px-2 py-2 text-right font-semibold ${isTransfer ? "" : "text-income"}`}>
         {transaction.amount > 0 ? (
           <>
             +<Money amount={transaction.amount} currency={currency} />
@@ -449,7 +453,7 @@ function DayList({
         <section key={date} aria-label={formatDayTitle(date, today)} className="overflow-hidden rounded-[14px] border border-line bg-surface">
           <div className={`flex justify-between bg-subtle px-3.5 py-2 ${eyebrowClass}`}>
             <span>{formatDayTitle(date, today)}</span>
-            <SignedMoney amount={transactions.reduce((sum, transaction) => sum + transaction.amount, 0)} currency={currency} />
+            <SignedMoney amount={transactions.reduce((sum, transaction) => sum + transaction.amount, 0)} currency={currency} isNeutral />
           </div>
           {transactions.map((transaction) => {
             const isSplit = transaction.subtransactions.length > 0;
@@ -480,7 +484,7 @@ function DayList({
                     <span className="truncate text-xs text-muted">{detail.join(" · ")}</span>
                   )}
                 </span>
-                <SignedMoney amount={transaction.amount} currency={currency} className="font-semibold" />
+                <SignedMoney amount={transaction.amount} currency={currency} isNeutral={isTransfer} className="font-semibold" />
               </Link>
             );
           })}
@@ -490,12 +494,21 @@ function DayList({
   );
 }
 
-/** Amount with an explicit sign; money coming in is tinted so it does not rely on the sign alone. */
-function SignedMoney({ amount, currency, className = "" }: { amount: number; currency: CurrencySettings; className?: string }) {
+interface SignedMoneyProps {
+  amount: number;
+  currency: CurrencySettings;
+  /** Transfers and totals move money around without earning or spending it, so they stay uncolored. */
+  isNeutral?: boolean;
+  className?: string;
+}
+
+/** Amount with an explicit sign: green for money coming in, red for money going out. */
+function SignedMoney({ amount, currency, isNeutral = false, className = "" }: SignedMoneyProps) {
+  const tone = isNeutral || amount === 0 ? "" : amount > 0 ? "text-income" : "text-expense";
   return (
-    <span className={`whitespace-nowrap tabular-nums ${amount > 0 ? "text-accent-strong" : ""} ${className}`}>
-      {amount > 0 ? "+" : ""}
-      <Money amount={amount} currency={currency} />
+    <span className={`whitespace-nowrap tabular-nums ${tone} ${className}`}>
+      {amount > 0 ? "+" : amount < 0 ? "−" : ""}
+      <Money amount={Math.abs(amount)} currency={currency} />
     </span>
   );
 }

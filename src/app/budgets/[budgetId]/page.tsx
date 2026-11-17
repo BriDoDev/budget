@@ -2,17 +2,17 @@ import Link from "@/components/app-link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { fundGoals, moveMoney, setAssignment } from "@/app/actions/budget";
+import { fundGoals, setAssignment } from "@/app/actions/budget";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { Icon } from "@/components/icons";
 import { Money } from "@/components/money";
 import { BudgetSkeleton } from "@/components/skeleton";
 import {
   cardClass,
+  detailBackdropClass,
+  detailPanelClass,
   eyebrowClass,
   headingClass,
-  inputClass,
-  labelClass,
   linkButtonClass,
   mutedTextClass,
   pageClass,
@@ -27,10 +27,13 @@ import type { BudgetMonthView, CategoryLine } from "@/lib/budget-view";
 import { describeGoal, groupLabel } from "@/lib/categories";
 import { getBudgetMonthView, listAssignments, listCategoryMonthActivity, type CategoryActivityItem } from "@/lib/data/budgets";
 import { listAccounts, listCategories } from "@/lib/data/core";
-import { formatMonthTitle, formatMonthWord, formatShortDate } from "@/lib/dates";
+import { formatMonthEnd, formatMonthTitle, formatMonthWord, formatShortDate } from "@/lib/dates";
 import { formatMilliunits, milliunitsToInput, type CurrencySettings } from "@/lib/money";
 import { currentMonthKey, toMonthKey, type MonthKey } from "@/lib/month";
 import { AssignInput } from "./assign-input";
+import { AssignWheel } from "./assign-wheel";
+import { CategoryDetailSlot, CategoryLink, CategorySelection, type CategoryPreview } from "./category-selection";
+import { MoveMoneyForm } from "./move-money-form";
 
 const MONTH_PARAM_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 const MAX_ATTENTION_ITEMS = 4;
@@ -84,13 +87,36 @@ async function BudgetMonth({ params, searchParams }: Pick<Props, "params" | "sea
   const selectedGroup = view.groups.find((group) => group.categories.some((category) => category.id === selectedId));
   const selected = selectedGroup?.categories.find((category) => category.id === selectedId);
 
+  const previews: Record<string, CategoryPreview> = {};
+  for (const group of view.groups) {
+    for (const category of group.categories) {
+      const status = statuses.get(category.id);
+      previews[category.id] = {
+        name: category.name,
+        groupName: groupLabel(group.name),
+        caption: status?.caption ?? "",
+        isWarning: status?.isWarning ?? false,
+      };
+    }
+  }
+
   return (
-    <>
+    <CategorySelection selectedId={selected?.id ?? ""}>
       <MonthHeader view={view} />
       <Summary view={view} />
       <div className="flex flex-wrap items-start gap-5">
-        <CategoryTable view={view} statuses={statuses} selectedId={selected?.id} />
-        {selected && selectedGroup ? (
+        <CategoryTable view={view} statuses={statuses} />
+        <CategoryDetailSlot
+          renderedId={selected?.id ?? ""}
+          closeHref={budgetHref(view.budget.id, view.month)}
+          previews={previews}
+          placeholder={
+            <aside className={`${cardClass} ${mutedTextClass} hidden flex-[1_1_300px] lg:block`}>
+              Elige una categoría para ver su meta, de dónde viene su saldo y sus movimientos del mes.
+            </aside>
+          }
+        >
+          {selected && selectedGroup ? (
           <CategoryDetail
             view={view}
             category={selected}
@@ -98,26 +124,15 @@ async function BudgetMonth({ params, searchParams }: Pick<Props, "params" | "sea
             status={statuses.get(selected.id)}
             accountNames={accountNames}
           />
-        ) : (
-          <aside className={`${cardClass} ${mutedTextClass} hidden flex-[1_1_300px] lg:block`}>
-            Elige una categoría para ver su meta, de dónde viene su saldo y sus movimientos del mes.
-          </aside>
-        )}
+          ) : null}
+        </CategoryDetailSlot>
       </div>
-    </>
+    </CategorySelection>
   );
 }
 
 function MonthHeader({ view }: { view: BudgetMonthView }) {
   const { budget } = view;
-  const categoryOptions = view.groups.map((group) => (
-    <optgroup key={group.id} label={groupLabel(group.name)}>
-      {group.categories.map((category) => (
-        <option key={category.id} value={category.id}>{category.name}</option>
-      ))}
-    </optgroup>
-  ));
-
   return (
     <header className="relative flex flex-wrap items-center justify-between gap-4">
       <div className="flex flex-wrap items-center gap-4 max-md:w-full">
@@ -140,29 +155,16 @@ function MonthHeader({ view }: { view: BudgetMonthView }) {
             Mover dinero
           </summary>
           <div className="absolute right-0 z-10 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-[14px] border border-line bg-surface p-4 shadow-lg max-md:inset-x-0 max-md:w-auto">
-            <ActionForm action={moveMoney} className="flex flex-col gap-3">
-              <input type="hidden" name="budgetId" value={budget.id} />
-              <input type="hidden" name="month" value={view.month} />
-              <label className={labelClass}>
-                De
-                <select name="from" defaultValue="" className={inputClass}>
-                  <option value="">Listo para asignar</option>
-                  {categoryOptions}
-                </select>
-              </label>
-              <label className={labelClass}>
-                A
-                <select name="to" defaultValue={view.groups[0]?.categories[0]?.id ?? ""} className={inputClass}>
-                  <option value="">Listo para asignar</option>
-                  {categoryOptions}
-                </select>
-              </label>
-              <label className={labelClass}>
-                Monto
-                <input name="amount" inputMode="decimal" required placeholder="0.00" className={`${inputClass} text-right`} />
-              </label>
-              <SubmitButton pendingLabel="Moviendo…">Mover</SubmitButton>
-            </ActionForm>
+            <MoveMoneyForm
+              budgetId={budget.id}
+              month={view.month}
+              currency={budget.currency}
+              readyToAssign={view.summary.readyToAssign}
+              groups={view.groups.map((group) => ({
+                name: groupLabel(group.name),
+                categories: group.categories.map((category) => ({ id: category.id, name: category.name, available: category.available })),
+              }))}
+            />
           </div>
         </details>
 
@@ -230,9 +232,9 @@ function Summary({ view }: { view: BudgetMonthView }) {
             {attentionCategories === 1 ? "1 categoría necesita atención" : `${attentionCategories} categorías necesitan atención`}
           </span>
           {attention.slice(0, MAX_ATTENTION_ITEMS).map((item) => (
-            <Link key={item.categoryId + item.text} href={`${budgetHref(view.budget.id, view.month, item.categoryId)}#detalle`} className="underline underline-offset-2 max-md:hidden">
+            <CategoryLink key={item.categoryId + item.text} categoryId={item.categoryId} href={`${budgetHref(view.budget.id, view.month, item.categoryId)}#detalle`} className="underline underline-offset-2 max-md:hidden">
               {item.text}
-            </Link>
+            </CategoryLink>
           ))}
           {attention.length > MAX_ATTENTION_ITEMS ? <span className="max-md:hidden">y {attention.length - MAX_ATTENTION_ITEMS} más</span> : null}
         </div>
@@ -252,11 +254,9 @@ function Summary({ view }: { view: BudgetMonthView }) {
 function CategoryTable({
   view,
   statuses,
-  selectedId,
 }: {
   view: BudgetMonthView;
   statuses: Map<string, CategoryStatus>;
-  selectedId: string | undefined;
 }) {
   const { currency } = view.budget;
 
@@ -273,7 +273,7 @@ function CategoryTable({
   }
 
   return (
-    <section aria-label="Categorías" className="min-w-0 flex-[999_1_560px] overflow-hidden rounded-[14px] border border-line bg-surface">
+    <section aria-label="Categorías" className="min-w-0 flex-[999_1_560px] rounded-[14px] border border-line bg-surface">
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr className={tableHeaderClass}>
@@ -293,21 +293,18 @@ function CategoryTable({
             </tr>
             {group.categories.map((category) => {
               const status = statuses.get(category.id);
-              const isSelected = category.id === selectedId;
+              const detailHref = `${budgetHref(view.budget.id, view.month, category.id)}#detalle`;
               return (
-                <tr key={category.id} className={`border-t border-hairline ${isSelected ? "bg-accent-soft/60" : ""}`}>
-                  <td className="px-4 py-2.5">
-                    <Link
-                      href={`${budgetHref(view.budget.id, view.month, category.id)}#detalle`}
-                      aria-current={isSelected ? "true" : undefined}
-                      className={`hover:underline ${isSelected ? "font-semibold" : "font-medium"}`}
-                    >
-                      {category.name}
-                    </Link>
-                    {status?.bar ? <ProgressBar bar={status.bar} /> : null}
-                    {status?.caption ? (
-                      <span className={`mt-1 block text-xs ${status.isWarning ? "text-warn-ink" : "text-muted"}`}>{status.caption}</span>
-                    ) : null}
+                <tr key={category.id} className="border-t border-hairline has-[a[aria-current]]:bg-accent-soft/60">
+                  <td>
+                    {/* The link covers the whole cell, so touching the bar or the caption opens the detail too. */}
+                    <CategoryLink categoryId={category.id} href={detailHref} className="group block px-4 py-2.5">
+                      <span className="font-medium group-hover:underline group-aria-[current=true]:font-semibold">{category.name}</span>
+                      {status?.bar ? <ProgressBar bar={status.bar} /> : null}
+                      {status?.caption ? (
+                        <span className={`mt-1 block text-xs font-normal ${status.isWarning ? "text-warn-ink" : "text-muted"}`}>{status.caption}</span>
+                      ) : null}
+                    </CategoryLink>
                   </td>
                   <td className="hidden px-2 py-2 sm:table-cell">
                     <AssignInput
@@ -317,14 +314,13 @@ function CategoryTable({
                       month={view.month}
                       assigned={category.assigned}
                       decimalDigits={currency.decimalDigits}
-                      isHighlighted={isSelected}
                     />
                   </td>
                   <td className="hidden px-2 py-2.5 text-right sm:table-cell"><Money amount={category.activity} currency={currency} /></td>
-                  <td className="px-4 py-2.5 text-right">
-                    <Link href={`${budgetHref(view.budget.id, view.month, category.id)}#detalle`} aria-label={`Disponible en ${category.name}`}>
+                  <td>
+                    <CategoryLink categoryId={category.id} href={detailHref} aria-label={`Disponible en ${category.name}`} className="flex justify-end px-4 py-2.5">
                       <AvailablePill category={category} currency={currency} />
-                    </Link>
+                    </CategoryLink>
                   </td>
                 </tr>
               );
@@ -369,15 +365,17 @@ async function CategoryDetail({
   const row = rows.find((candidate) => candidate.id === category.id);
   const goalText = row ? describeGoal(row, currency) : null;
   const missing = category.goal?.underfunded ?? 0;
+  // A category can be given what it already has plus whatever is still unassigned.
+  const assignCeiling = category.assigned + Math.max(0, view.summary.readyToAssign);
 
   return (
     <>
     {/* On phones the detail is a sheet over the list; touching outside it closes it. */}
-    <Link href={closeHref} scroll={false} aria-label="Cerrar detalle" className="fixed inset-0 z-30 bg-ink/45 md:hidden" />
+    <CategoryLink categoryId="" href={closeHref} aria-label="Cerrar detalle" className={detailBackdropClass} />
     <aside
       id="detalle"
       aria-label={`Detalle de ${category.name}`}
-      className={`${cardClass} flex flex-[1_1_300px] scroll-mt-4 flex-col gap-4 max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-40 max-md:max-h-[88dvh] max-md:overflow-y-auto max-md:rounded-t-[22px] max-md:rounded-b-none max-md:border-0 max-md:pt-2.5 max-md:pb-8 max-md:shadow-2xl`}
+      className={detailPanelClass}
     >
       <span aria-hidden="true" className="h-1 w-10 shrink-0 self-center rounded-full bg-line-strong md:hidden" />
       <div className="flex items-start justify-between gap-3">
@@ -386,14 +384,14 @@ async function CategoryDetail({
           <h2 className="font-display text-[22px] font-semibold">{category.name}</h2>
           {status?.caption ? <span className={`text-sm ${status.isWarning ? "text-warn-ink" : "text-muted"}`}>{status.caption}</span> : null}
         </div>
-        <Link
+        <CategoryLink
+          categoryId=""
           href={closeHref}
-          scroll={false}
           aria-label="Cerrar detalle"
           className="-mt-1 -mr-2 flex size-11 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-subtle md:hidden"
         >
           <Icon name="close" size={20} />
-        </Link>
+        </CategoryLink>
       </div>
 
       {category.goal && goalText ? (
@@ -444,6 +442,19 @@ async function CategoryDetail({
         <dd className="border-t border-line pt-2.5 text-right font-semibold"><Money amount={category.available} currency={currency} /></dd>
       </dl>
 
+      {assignCeiling > 0 ? (
+        <AssignWheel
+          // Start over from the stored amount after every change.
+          key={`${category.id}:${category.assigned}`}
+          budgetId={budget.id}
+          categoryId={category.id}
+          month={view.month}
+          assigned={category.assigned}
+          max={assignCeiling}
+          currency={currency}
+        />
+      ) : null}
+
       {shortcuts.length > 0 ? (
         <div className="flex flex-col gap-2">
           <span className={eyebrowClass}>Atajos para asignar</span>
@@ -488,7 +499,7 @@ async function CategoryDetail({
 
       <div className="flex flex-wrap justify-between gap-3 border-t border-line pt-3">
         <Link href={`/budgets/${budget.id}/categories`} className={linkButtonClass}>Editar categoría</Link>
-        <Link href={closeHref} scroll={false} className={linkButtonClass}>Cerrar detalle</Link>
+        <CategoryLink categoryId="" href={closeHref} className={linkButtonClass}>Cerrar detalle</CategoryLink>
       </div>
     </aside>
     </>
@@ -587,7 +598,7 @@ function describeStatus(category: CategoryLine, view: BudgetMonthView, cardBalan
   if (category.goal && category.goal.underfunded > 0) {
     return {
       bar: { percent: category.goal.percentageComplete, isWarning: true, label: `Meta al ${category.goal.percentageComplete} por ciento` },
-      caption: `Faltan ${money(category.goal.underfunded)} para la meta`,
+      caption: `Faltan ${money(category.goal.underfunded)} para la meta${describeDue(category, view.month)}`,
       isWarning: true,
     };
   }
@@ -597,9 +608,14 @@ function describeStatus(category: CategoryLine, view: BudgetMonthView, cardBalan
   }
   if (category.goal) {
     const percent = category.goal.percentageComplete;
-    return { bar: { percent, isWarning: false, label: `Meta al ${percent} por ciento` }, caption: `Meta al ${percent}%`, isWarning: false };
+    return { bar: { percent, isWarning: false, label: `Meta al ${percent} por ciento` }, caption: `Meta al ${percent}%${describeDue(category, view.month)}`, isWarning: false };
   }
   return { bar: null, caption: "", isWarning: false };
+}
+
+/** " - 30 nov": the day by which the goal has to be met; empty for goals without a deadline. */
+function describeDue(category: CategoryLine, month: MonthKey): string {
+  return category.goalDueMonth ? ` - ${formatMonthEnd(category.goalDueMonth, month)}` : "";
 }
 
 function listAttention(categories: CategoryLine[], currency: CurrencySettings): AttentionItem[] {

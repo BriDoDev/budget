@@ -22,6 +22,18 @@ export function formatMonthTitle(month: string): string {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
+/** "30 nov" for the last day of a month, with the year when it is not `referenceMonth`'s. */
+export function formatMonthEnd(month: string, referenceMonth: string): string {
+  const [year, monthNumber] = month.slice(0, 7).split("-").map(Number);
+  const label = new Intl.DateTimeFormat(LOCALE, {
+    day: "numeric",
+    month: "short",
+    year: month.slice(0, 4) === referenceMonth.slice(0, 4) ? undefined : "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, monthNumber, 0)));
+  return label.replace(/\./g, "");
+}
+
 /** "noviembre" from a month key. */
 export function formatMonthWord(month: string): string {
   return new Intl.DateTimeFormat(LOCALE, { month: "long", timeZone: "UTC" }).format(

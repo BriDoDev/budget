@@ -3,6 +3,8 @@
 import { useActionState, useState } from "react";
 import { saveTransaction } from "@/app/actions/transactions";
 import { PendingLabel } from "@/components/action-form";
+import { AmountField } from "@/components/amount-field";
+import { SearchSelect, type SearchSelectGroup } from "@/components/search-select";
 import { inputClass, labelClass, linkButtonClass, primaryButtonClass } from "@/components/ui";
 import { IDLE_STATE } from "@/lib/actions/form";
 import { parseAmountInput } from "@/lib/money";
@@ -85,13 +87,19 @@ function TransactionFields({
   const updateSplit = (index: number, patch: Partial<SplitDraft>) =>
     setSplits((current) => current.map((split, position) => (position === index ? { ...split, ...patch } : split)));
 
-  const categoryOptions = categoryGroups.map((group) => (
-    <optgroup key={group.name} label={group.name}>
-      {group.options.map((option) => (
-        <option key={option.id} value={option.id}>{option.name}</option>
-      ))}
-    </optgroup>
-  ));
+  const baseOptions = [
+    { value: "", label: "Sin categoría" },
+    ...(incomeCategoryId ? [{ value: incomeCategoryId, label: "Ingreso: listo para asignar" }] : []),
+  ];
+  const groupedOptions: SearchSelectGroup[] = categoryGroups.map((group) => ({
+    label: group.name,
+    options: group.options.map((option) => ({ value: option.id, label: option.name })),
+  }));
+  const categoryOptions: SearchSelectGroup[] = [
+    { options: [...baseOptions, { value: SPLIT_CATEGORY, label: "Dividir en varias categorías…", disabled: isTransfer }] },
+    ...groupedOptions,
+  ];
+  const splitCategoryOptions: SearchSelectGroup[] = [{ options: baseOptions }, ...groupedOptions];
 
   return (
     <>
@@ -146,27 +154,17 @@ function TransactionFields({
             ))}
           </select>
         </label>
-        <label className={labelClass}>
+        <div className={labelClass}>
           Categoría
-          <select
-            name="categoryId"
-            value={categoryId}
-            onChange={(event) => setCategoryId(event.target.value)}
-            className={inputClass}
-          >
-            <option value="">Sin categoría</option>
-            {incomeCategoryId ? <option value={incomeCategoryId}>Ingreso: listo para asignar</option> : null}
-            <option value={SPLIT_CATEGORY} disabled={isTransfer}>Dividir en varias categorías…</option>
-            {categoryOptions}
-          </select>
-        </label>
+          <SearchSelect name="categoryId" label="Categoría" groups={categoryOptions} value={categoryId} onValueChange={setCategoryId} />
+        </div>
         <label className={labelClass}>
           Salida
-          <input name="outflow" inputMode="decimal" value={outflow} onChange={(event) => setOutflow(event.target.value)} placeholder="0.00" className={`${inputClass} text-right`} />
+          <AmountField name="outflow" defaultValue={outflow} onValueChange={setOutflow} placeholder="0.00" className={`${inputClass} text-right text-expense`} />
         </label>
         <label className={labelClass}>
           Entrada
-          <input name="inflow" inputMode="decimal" value={inflow} onChange={(event) => setInflow(event.target.value)} placeholder="0.00" className={`${inputClass} text-right`} />
+          <AmountField name="inflow" defaultValue={inflow} onValueChange={setInflow} placeholder="0.00" className={`${inputClass} text-right text-income`} />
         </label>
         <label className={labelClass}>
           Nota
@@ -179,21 +177,16 @@ function TransactionFields({
           <legend className="px-1 text-xs font-semibold text-muted">Partes de la transacción</legend>
           {splits.map((split, index) => (
             <div key={index} className="grid grid-cols-[1fr_7rem_auto] items-center gap-2">
-              <select
-                aria-label={`Categoría de la parte ${index + 1}`}
+              <SearchSelect
+                label={`Categoría de la parte ${index + 1}`}
+                groups={splitCategoryOptions}
                 value={split.categoryId}
-                onChange={(event) => updateSplit(index, { categoryId: event.target.value })}
-                className={inputClass}
-              >
-                <option value="">Sin categoría</option>
-                {incomeCategoryId ? <option value={incomeCategoryId}>Ingreso: listo para asignar</option> : null}
-                {categoryOptions}
-              </select>
-              <input
+                onValueChange={(value) => updateSplit(index, { categoryId: value })}
+              />
+              <AmountField
                 aria-label={`Monto de la parte ${index + 1}`}
-                inputMode="decimal"
-                value={split.amount}
-                onChange={(event) => updateSplit(index, { amount: event.target.value })}
+                defaultValue={split.amount}
+                onValueChange={(value) => updateSplit(index, { amount: value })}
                 placeholder="0.00"
                 className={`${inputClass} text-right`}
               />

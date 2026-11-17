@@ -6,7 +6,9 @@ import {
   deleteScheduledTransaction,
 } from "@/app/actions/scheduled";
 import { ActionForm, SubmitButton } from "@/components/action-form";
+import { AmountField } from "@/components/amount-field";
 import { Money } from "@/components/money";
+import { SearchSelect } from "@/components/search-select";
 import { ListSkeleton } from "@/components/skeleton";
 import { cardClass, inputClass, labelClass, linkButtonClass, mutedTextClass, pageClass, tableHeaderClass } from "@/components/ui";
 import { todayIso } from "@/lib/actions/form";
@@ -100,31 +102,36 @@ async function Scheduled({ params }: Pick<Props, "params">) {
                   ))}
                 </select>
               </label>
-              <label className={labelClass}>
+              <div className={labelClass}>
                 Categoría
-                <select name="categoryId" defaultValue="" className={inputClass}>
-                  <option value="">Sin categoría</option>
-                  {incomeCategory ? <option value={incomeCategory.id}>Ingreso: listo para asignar</option> : null}
-                  {groups
-                    .filter((group) => !group.is_internal && !group.hidden)
-                    .map((group) => (
-                      <optgroup key={group.id} label={groupLabel(group.name)}>
-                        {categories
+                <SearchSelect
+                  name="categoryId"
+                  label="Categoría"
+                  groups={[
+                    {
+                      options: [
+                        { value: "", label: "Sin categoría" },
+                        ...(incomeCategory ? [{ value: incomeCategory.id, label: "Ingreso: listo para asignar" }] : []),
+                      ],
+                    },
+                    ...groups
+                      .filter((group) => !group.is_internal && !group.hidden)
+                      .map((group) => ({
+                        label: groupLabel(group.name),
+                        options: categories
                           .filter((category) => category.group_id === group.id && category.kind === "standard" && !category.hidden)
-                          .map((category) => (
-                            <option key={category.id} value={category.id}>{category.name}</option>
-                          ))}
-                      </optgroup>
-                    ))}
-                </select>
-              </label>
+                          .map((category) => ({ value: category.id, label: category.name })),
+                      })),
+                  ]}
+                />
+              </div>
               <label className={labelClass}>
                 Salida
-                <input name="outflow" inputMode="decimal" placeholder="0.00" className={`${inputClass} text-right`} />
+                <AmountField name="outflow" placeholder="0.00" className={`${inputClass} text-right text-expense`} />
               </label>
               <label className={labelClass}>
                 Entrada
-                <input name="inflow" inputMode="decimal" placeholder="0.00" className={`${inputClass} text-right`} />
+                <AmountField name="inflow" placeholder="0.00" className={`${inputClass} text-right text-income`} />
               </label>
               <label className={`${labelClass} sm:col-span-2`}>
                 Nota

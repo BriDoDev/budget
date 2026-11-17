@@ -1,6 +1,7 @@
 import {
   computeBudget,
   computeGoalStatus,
+  goalDueMonth,
   CREDIT_ACCOUNT_TYPES,
   type ActivityLine,
   type CardAdvanceLine,
@@ -47,6 +48,8 @@ export interface CategoryLine {
   cashOverspent: number;
   creditOverspent: number;
   goal: GoalStatus | null;
+  /** Month the goal is due, when it has a date. */
+  goalDueMonth: MonthKey | null;
 }
 
 export interface CategoryGroupLine {
@@ -145,6 +148,7 @@ export function buildBudgetMonthView(rows: BudgetRows, month: MonthKey): BudgetM
             cashOverspent: values?.cashOverspent ?? 0,
             creditOverspent: values?.creditOverspent ?? 0,
             goal: goalStatus,
+            goalDueMonth: goal ? goalDueMonth(goal, month) : null,
           };
         });
       return {

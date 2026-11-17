@@ -9,6 +9,21 @@ describe("amount inputs", () => {
     expect(parseAmountInput(".75")).toBe(750);
   });
 
+  it("does the math when a calculation is typed", () => {
+    expect(parseAmountInput("100+200")).toBe(300_000);
+    expect(parseAmountInput("100.00 + 200")).toBe(300_000);
+    expect(parseAmountInput("1,200/12-50")).toBe(50_000);
+    expect(parseAmountInput("10+2×3")).toBe(16_000);
+    expect(parseAmountInput("-50+20")).toBe(-30_000);
+    expect(parseAmountInput("100÷3")).toBe(33_333);
+  });
+
+  it("rejects calculations that make no sense", () => {
+    expect(parseAmountInput("100+")).toBeNull();
+    expect(parseAmountInput("10/0")).toBeNull();
+    expect(parseAmountInput("5++5")).toBeNull();
+  });
+
   it("rejects text that is not a number", () => {
     expect(parseAmountInput("")).toBeNull();
     expect(parseAmountInput("abc")).toBeNull();

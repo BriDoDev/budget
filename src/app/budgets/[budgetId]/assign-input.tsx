@@ -2,6 +2,7 @@
 
 import { useActionState, useRef } from "react";
 import { setAssignment } from "@/app/actions/budget";
+import { AmountField } from "@/components/amount-field";
 import { IDLE_STATE } from "@/lib/actions/form";
 import { milliunitsToInput } from "@/lib/money";
 
@@ -35,11 +36,11 @@ export function AssignInput({
       <input type="hidden" name="budgetId" value={budgetId} />
       <input type="hidden" name="categoryId" value={categoryId} />
       <input type="hidden" name="month" value={month} />
-      <input
+      <AmountField
         key={`${assigned}:${state.version}`}
         name="amount"
         defaultValue={initialValue}
-        inputMode="decimal"
+        decimalDigits={decimalDigits}
         aria-label={`Asignado a ${categoryName}`}
         onFocus={(event) => event.currentTarget.select()}
         onBlur={(event) => {

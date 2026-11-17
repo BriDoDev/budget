@@ -4,7 +4,9 @@ import Link from "@/components/app-link";
 import { useActionState, useState, type ReactNode } from "react";
 import { saveTransaction } from "@/app/actions/transactions";
 import { PendingLabel } from "@/components/action-form";
+import { AmountField } from "@/components/amount-field";
 import { Icon, type IconName } from "@/components/icons";
+import { SearchSelect, type SearchSelectGroup } from "@/components/search-select";
 import { linkButtonClass, pillNeutralClass, pillPositiveClass, pillWarnClass } from "@/components/ui";
 import { IDLE_STATE } from "@/lib/actions/form";
 import { formatMilliunits, parseAmountInput, type CurrencySettings } from "@/lib/money";
@@ -29,10 +31,11 @@ interface QuickTransactionFormProps {
   fullFormHref: string;
 }
 
-const KIND_OPTIONS: Array<{ value: TransactionKind; label: string; submitLabel: string }> = [
-  { value: "expense", label: "Gasto", submitLabel: "Guardar gasto" },
-  { value: "income", label: "Ingreso", submitLabel: "Guardar ingreso" },
-  { value: "transfer", label: "Traspaso", submitLabel: "Guardar traspaso" },
+/** Each kind has its own color, so it is clear at a glance whether money is leaving or coming in. */
+const KIND_OPTIONS: Array<{ value: TransactionKind; label: string; submitLabel: string; activeClass: string; amountClass: string; submitClass: string }> = [
+  { value: "expense", label: "Gasto", submitLabel: "Guardar gasto", activeClass: "bg-expense-soft text-expense", amountClass: "text-expense", submitClass: "bg-expense" },
+  { value: "income", label: "Ingreso", submitLabel: "Guardar ingreso", activeClass: "bg-income-soft text-income", amountClass: "text-income", submitClass: "bg-income" },
+  { value: "transfer", label: "Traspaso", submitLabel: "Guardar traspaso", activeClass: "bg-surface text-ink", amountClass: "text-ink", submitClass: "bg-accent" },
 ];
 
 const FIELD_CLASS = "min-h-7 w-full min-w-0 appearance-none bg-transparent text-[15px] font-medium text-ink outline-none";
@@ -65,7 +68,18 @@ export function QuickTransactionForm({
     : (transferTargets[0]?.id ?? "");
   const amountMilliunits = parseAmountInput(amount || "0") ?? 0;
   const remaining = kind === "expense" && categoryId in availableByCategory ? availableByCategory[categoryId] - amountMilliunits : null;
-  const submitLabel = KIND_OPTIONS.find((option) => option.value === kind)?.submitLabel ?? "Guardar";
+  const kindOption = KIND_OPTIONS.find((option) => option.value === kind) ?? KIND_OPTIONS[0];
+  const categoryOptions: SearchSelectGroup[] = [
+    { options: [{ value: "", label: "Sin categoría" }] },
+    ...categoryGroups.map((group) => ({
+      label: group.name,
+      options: group.options.map((option) => ({
+        value: option.id,
+        label: option.name,
+        hint: option.id in availableByCategory ? formatMilliunits(availableByCategory[option.id], currency) : undefined,
+      })),
+    })),
+  ];
 
   return (
     <form action={formAction} className="flex flex-col gap-4 text-[15px]">
@@ -87,7 +101,7 @@ export function QuickTransactionForm({
             disabled={option.value === "transfer" && !canTransfer}
             onClick={() => setKind(option.value)}
             className={`min-h-11 cursor-pointer rounded-[10px] disabled:cursor-default disabled:opacity-50 ${
-              kind === option.value ? "bg-surface font-semibold text-ink shadow-sm" : "font-medium text-ink-soft"
+              kind === option.value ? `${option.activeClass} font-semibold shadow-sm` : "font-medium text-ink-soft"
             }`}
           >
             {option.label}
@@ -96,20 +110,22 @@ export function QuickTransactionForm({
       </div>
 
       <label className="flex flex-col items-center gap-1 py-4">
-        <span className="text-[13px] text-muted">Monto</span>
-        <span className="flex items-baseline justify-center gap-1">
-          <span aria-hidden="true" className="font-display text-3xl font-semibold text-muted">
+        <span className="text-[13px] text-muted">
+          {kind === "income" ? "Monto que entra" : kind === "expense" ? "Monto que sale" : "Monto"}
+        </span>
+        <span className={`flex items-start justify-center gap-1 ${kindOption.amountClass}`}>
+          <span aria-hidden="true" className="pt-3 font-display text-3xl font-semibold opacity-70">
             {kind === "income" ? "+$" : "−$"}
           </span>
-          <input
-            inputMode="decimal"
+          <AmountField
             required
             autoFocus
-            value={amount}
-            onChange={(event) => setAmount(event.target.value)}
+            onValueChange={setAmount}
+            decimalDigits={currency.decimalDigits}
+            operators="inline"
             placeholder="0.00"
             size={Math.max(4, amount.length)}
-            className="max-w-[70vw] bg-transparent font-display text-[52px] leading-none font-semibold text-ink outline-none placeholder:text-line-strong"
+            className="max-w-[70vw] bg-transparent font-display text-[52px] leading-none font-semibold outline-none placeholder:text-line-strong"
           />
         </span>
       </label>
@@ -130,6 +146,7 @@ export function QuickTransactionForm({
           <FieldRow
             icon="budget"
             label="Categoría"
+            isGroup
             trailing={
               remaining === null ? null : (
                 <span className={`text-[13px] ${remaining < 0 ? pillWarnClass : remaining > 0 ? pillPositiveClass : pillNeutralClass}`}>
@@ -139,16 +156,14 @@ export function QuickTransactionForm({
               )
             }
           >
-            <select name="categoryId" value={categoryId} onChange={(event) => setCategoryId(event.target.value)} className={FIELD_CLASS}>
-              <option value="">Sin categoría</option>
-              {categoryGroups.map((group) => (
-                <optgroup key={group.name} label={group.name}>
-                  {group.options.map((option) => (
-                    <option key={option.id} value={option.id}>{option.name}</option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+            <SearchSelect
+              name="categoryId"
+              label="Categoría"
+              groups={categoryOptions}
+              value={categoryId}
+              onValueChange={setCategoryId}
+              className={`${FIELD_CLASS} flex items-center gap-2 text-left`}
+            />
           </FieldRow>
         ) : null}
 
@@ -198,9 +213,9 @@ export function QuickTransactionForm({
       <button
         type="submit"
         disabled={isPending}
-        className="min-h-14 cursor-pointer rounded-2xl bg-accent text-base font-semibold text-white hover:brightness-110 disabled:opacity-60"
+        className={`min-h-14 cursor-pointer rounded-2xl text-base font-semibold text-white hover:brightness-110 disabled:opacity-60 ${kindOption.submitClass}`}
       >
-        {isPending ? <PendingLabel>Guardando…</PendingLabel> : submitLabel}
+        {isPending ? <PendingLabel>Guardando…</PendingLabel> : kindOption.submitLabel}
       </button>
 
       <Link href={fullFormHref} className={`${linkButtonClass} flex min-h-11 items-center justify-center`}>
@@ -210,16 +225,26 @@ export function QuickTransactionForm({
   );
 }
 
+interface FieldRowProps {
+  icon: IconName;
+  label: string;
+  trailing?: ReactNode;
+  /** For fields that open their own picker: a label would hand every tap inside the picker back to the field. */
+  isGroup?: boolean;
+  children: ReactNode;
+}
+
 /** One tappable row of the form: the whole row is the label, so touching anywhere focuses its field. */
-function FieldRow({ icon, label, trailing, children }: { icon: IconName; label: string; trailing?: ReactNode; children: ReactNode }) {
+function FieldRow({ icon, label, trailing, isGroup = false, children }: FieldRowProps) {
+  const Row = isGroup ? "div" : "label";
   return (
-    <label className="flex min-h-15 items-center gap-3 border-t border-hairline px-3.5 py-2 first:border-t-0 focus-within:bg-accent-soft/50">
+    <Row className="flex min-h-15 items-center gap-3 border-t border-hairline px-3.5 py-2 first:border-t-0 focus-within:bg-accent-soft/50">
       <Icon name={icon} size={20} className="text-muted" />
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="text-xs text-muted">{label}</span>
         {children}
       </span>
       {trailing}
-    </label>
+    </Row>
   );
 }
