@@ -27,7 +27,7 @@ import type { BudgetMonthView, CategoryLine } from "@/lib/budget-view";
 import { describeGoal, groupLabel } from "@/lib/categories";
 import { getBudgetMonthView, listAssignments, listCategoryMonthActivity, type CategoryActivityItem } from "@/lib/data/budgets";
 import { listAccounts, listCategories } from "@/lib/data/core";
-import { formatMonthEnd, formatMonthTitle, formatMonthWord, formatShortDate } from "@/lib/dates";
+import { formatDueDate, formatMonthTitle, formatMonthWord, formatShortDate } from "@/lib/dates";
 import { formatMilliunits, milliunitsToInput, type CurrencySettings } from "@/lib/money";
 import { currentMonthKey, toMonthKey, type MonthKey } from "@/lib/month";
 import { AssignInput } from "./assign-input";
@@ -417,7 +417,7 @@ async function CategoryDetail({
           )}
         </div>
       ) : (
-        <Link href={`/budgets/${budget.id}/categories`} className={linkButtonClass}>
+        <Link href={`/budgets/${budget.id}/categories?edit=${category.id}`} className={linkButtonClass}>
           Ponerle una meta
         </Link>
       )}
@@ -498,7 +498,7 @@ async function CategoryDetail({
       ) : null}
 
       <div className="flex flex-wrap justify-between gap-3 border-t border-line pt-3">
-        <Link href={`/budgets/${budget.id}/categories`} className={linkButtonClass}>Editar categoría</Link>
+        <Link href={`/budgets/${budget.id}/categories?edit=${category.id}`} className={linkButtonClass}>Editar categoría</Link>
         <CategoryLink categoryId="" href={closeHref} className={linkButtonClass}>Cerrar detalle</CategoryLink>
       </div>
     </aside>
@@ -615,7 +615,7 @@ function describeStatus(category: CategoryLine, view: BudgetMonthView, cardBalan
 
 /** " - 30 nov": the day by which the goal has to be met; empty for goals without a deadline. */
 function describeDue(category: CategoryLine, month: MonthKey): string {
-  return category.goalDueMonth ? ` - ${formatMonthEnd(category.goalDueMonth, month)}` : "";
+  return category.goalDueMonth ? ` - ${formatDueDate(category.goalDueMonth, month, category.goalDueDay)}` : "";
 }
 
 function listAttention(categories: CategoryLine[], currency: CurrencySettings): AttentionItem[] {

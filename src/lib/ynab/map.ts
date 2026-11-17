@@ -313,7 +313,7 @@ export function resolveCategoryKind(category: Pick<YnabCategory, "name" | "inter
 
 type GoalColumns = Pick<
   CategoryRow,
-  "goal_type" | "goal_target" | "goal_target_month" | "goal_cadence_months" | "goal_needs_whole_amount" | "goal_created_month"
+  "goal_type" | "goal_target" | "goal_target_month" | "goal_cadence_months" | "goal_needs_whole_amount" | "goal_due_day" | "goal_created_month"
 >;
 
 /** Translates YNAB goal fields. Weekly targets become an equivalent monthly amount (an approximation). */
@@ -327,6 +327,7 @@ export function mapGoal(category: YnabCategory): GoalColumns {
       goal_target_month: null,
       goal_cadence_months: 0,
       goal_needs_whole_amount: true,
+      goal_due_day: null,
       goal_created_month: null,
     };
   }
@@ -341,8 +342,15 @@ export function mapGoal(category: YnabCategory): GoalColumns {
     goal_target_month: targetDate && !isWeekly ? toMonthKey(targetDate) : null,
     goal_cadence_months: cadenceInMonths(cadence, frequency),
     goal_needs_whole_amount: category.goal_needs_whole_amount ?? true,
+    goal_due_day: isWeekly ? null : dueDay(category),
     goal_created_month: category.goal_creation_month ? toMonthKey(category.goal_creation_month) : null,
   };
+}
+
+/** Day of the month a YNAB goal is due: its own day field, or the day of its target date. */
+function dueDay(category: YnabCategory): number | null {
+  const day = category.goal_day ?? (category.goal_target_date ? Number(category.goal_target_date.slice(8, 10)) : null);
+  return day !== null && Number.isInteger(day) && day >= 1 && day <= 31 ? day : null;
 }
 
 function cadenceInMonths(cadence: number, frequency: number): number {

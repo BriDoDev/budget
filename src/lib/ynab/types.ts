@@ -73,6 +73,8 @@ export interface YnabCategory {
   goal_type?: "TB" | "TBD" | "MF" | "NEED" | "DEBT" | null;
   goal_target?: number | null;
   goal_target_date?: string | null;
+  /** Day of the month (or of the week, for weekly targets) the goal is due. */
+  goal_day?: number | null;
   goal_target_month?: string | null;
   /** 0 none, 1 monthly, 2 weekly, 13 yearly (all multiplied by the frequency); 3-12 = every 2-11 months, 14 = every 2 years. */
   goal_cadence?: number | null;

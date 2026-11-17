@@ -25,25 +25,26 @@ export function formatMonthName(month: string): string {
 
 /** One-line description of a category goal, or null when it has none. */
 export function describeGoal(
-  category: Pick<CategoryRow, "goal_type" | "goal_target" | "goal_target_month" | "goal_cadence_months" | "goal_needs_whole_amount">,
+  category: Pick<CategoryRow, "goal_type" | "goal_target" | "goal_target_month" | "goal_cadence_months" | "goal_needs_whole_amount" | "goal_due_day">,
   currency: CurrencySettings,
 ): string | null {
   if (!category.goal_type || !category.goal_target) {
     return null;
   }
   const amount = formatMilliunits(category.goal_target, currency);
+  const day = category.goal_due_day ? `, el día ${category.goal_due_day}` : "";
   switch (category.goal_type) {
     case "monthly_funding":
-      return `Asignar ${amount} cada mes`;
+      return `Asignar ${amount} cada mes${day}`;
     case "target_balance":
       return `Llegar a ${amount}`;
     case "target_balance_by_date":
-      return category.goal_target_month ? `Llegar a ${amount} para ${formatMonthName(category.goal_target_month)}` : `Llegar a ${amount}`;
+      return category.goal_target_month ? `Llegar a ${amount} para ${formatMonthName(category.goal_target_month)}${day}` : `Llegar a ${amount}`;
     case "needed_spending": {
       const every = category.goal_cadence_months > 1 ? `cada ${category.goal_cadence_months} meses` : "cada mes";
       const due = category.goal_cadence_months > 1 && category.goal_target_month ? `, próximo en ${formatMonthName(category.goal_target_month)}` : "";
       const mode = category.goal_needs_whole_amount ? "" : " (rellenando lo que falte)";
-      return `Tener ${amount} para gastar ${every}${due}${mode}`;
+      return `Tener ${amount} para gastar ${every}${day}${due}${mode}`;
     }
   }
 }

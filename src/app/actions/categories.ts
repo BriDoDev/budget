@@ -2,6 +2,7 @@
 
 import { refresh } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { CREDIT_CARD_PAYMENTS_GROUP } from "@/lib/categories";
 import { fail, readMonth, readText, readUuid, succeed, type ActionState } from "@/lib/actions/form";
 import type { GoalType } from "@/lib/budget-engine";
 import { currentMonthKey } from "@/lib/month";
@@ -72,7 +73,7 @@ export async function updateCategoryGroup(previous: ActionState, formData: FormD
   return succeed(previous, "Guardado.");
 }
 
-/** Saves name, note, visibility and goal of a category. */
+/** Saves name, note, group, visibility and goal of a category. */
 export async function updateCategory(previous: ActionState, formData: FormData): Promise<ActionState> {
   const categoryId = readUuid(formData, "categoryId");
   const name = readText(formData, "name");
@@ -85,6 +86,8 @@ export async function updateCategory(previous: ActionState, formData: FormData):
   const goalTarget = goalType ? parseAmountInput(readText(formData, "goalTarget")) : null;
   const goalMonth = readMonth(formData, "goalTargetMonth");
   const repeatMonths = Number(readText(formData, "goalRepeat")) || 0;
+  const dueDayChoice = Number(readText(formData, "goalDueDay"));
+  const dueDay = Number.isInteger(dueDayChoice) && dueDayChoice >= 1 && dueDayChoice <= 31 ? dueDayChoice : null;
   if (goalType && (goalTarget === null || goalTarget <= 0)) {
     return fail(previous, "Escribe el monto de la meta.");
   }
@@ -99,16 +102,34 @@ export async function updateCategory(previous: ActionState, formData: FormData):
   const supabase = await createClient();
   const { data: current, error: readError } = await supabase
     .from("categories")
-    .select("goal_type, goal_created_month")
+    .select("budget_id, group_id, kind, goal_type, goal_created_month")
     .eq("id", categoryId)
     .maybeSingle();
   if (readError || !current) {
     return fail(previous, "No se encontró la categoría.");
   }
 
+  // Moving to another group puts the category at the end of it; card payment categories stay in theirs.
+  const groupId = readUuid(formData, "groupId");
+  const move: { group_id?: string; sort_index?: number } = {};
+  if (groupId && groupId !== current.group_id && current.kind === "standard") {
+    const { data: group } = await supabase
+      .from("category_groups")
+      .select("id, name, is_internal")
+      .eq("id", groupId)
+      .eq("budget_id", current.budget_id)
+      .maybeSingle();
+    if (!group || group.is_internal || group.name === CREDIT_CARD_PAYMENTS_GROUP) {
+      return fail(previous, "No se puede mover la categoría a ese grupo.");
+    }
+    move.group_id = groupId;
+    move.sort_index = await nextSortIndex(supabase, "categories", current.budget_id);
+  }
+
   const { error } = await supabase
     .from("categories")
     .update({
+      ...move,
       name,
       note: readText(formData, "note") || null,
       hidden: formData.get("hidden") === "on",
@@ -117,6 +138,7 @@ export async function updateCategory(previous: ActionState, formData: FormData):
       goal_target_month: usesMonth ? goalMonth : null,
       goal_cadence_months: goalType === "needed_spending" ? Math.max(1, repeatMonths) : 0,
       goal_needs_whole_amount: formData.get("goalRefill") !== "on",
+      goal_due_day: goalType && goalType !== "target_balance" ? dueDay : null,
       // A goal keeps its start month while its type stays the same.
       goal_created_month: goalType
         ? current.goal_type === goalType && current.goal_created_month
@@ -180,4 +202,57 @@ async function nextSortIndex(supabase: SupabaseClient, table: string, budgetId: 
     .limit(1)
     .maybeSingle();
   return ((data?.sort_index as number | undefined) ?? 0) + 1;
+}
+
+/**
+ * Drops a category at a position: into `groupId`, right before `beforeId`, or
+ * at the end of the group when `beforeId` is null. Used by drag and drop.
+ */
+export async function placeCategory(categoryId: string, groupId: string, beforeId: string | null): Promise<void> {
+  const supabase = await createClient();
+  const { data: category } = await supabase
+    .from("categories")
+    .select("id, budget_id, group_id, kind")
+    .eq("id", categoryId)
+    .maybeSingle();
+  if (!category) {
+    return;
+  }
+  if (groupId !== category.group_id) {
+    const { data: group } = await supabase
+      .from("category_groups")
+      .select("id, name, is_internal")
+      .eq("id", groupId)
+      .eq("budget_id", category.budget_id)
+      .maybeSingle();
+    // Card payment categories live in their own group, and nothing else moves into it.
+    if (!group || group.is_internal || group.name === CREDIT_CARD_PAYMENTS_GROUP || category.kind !== "standard") {
+      return;
+    }
+  }
+
+  const { data: siblings } = await supabase
+    .from("categories")
+    .select("id, sort_index")
+    .eq("budget_id", category.budget_id)
+    .eq("group_id", groupId)
+    .neq("id", categoryId)
+    .order("sort_index")
+    .order("id");
+  const ordered = ((siblings ?? []) as Array<{ id: string; sort_index: number }>).map((row) => row.id);
+  const position = beforeId ? ordered.indexOf(beforeId) : -1;
+  ordered.splice(position < 0 ? ordered.length : position, 0, categoryId);
+
+  // Rewrites every position of the group so ties left by imports cannot scramble the order.
+  const base = Math.min(0, ...(siblings ?? []).map((row) => row.sort_index as number));
+  for (const [index, id] of ordered.entries()) {
+    const { error } = await supabase
+      .from("categories")
+      .update(id === categoryId ? { group_id: groupId, sort_index: base + index } : { sort_index: base + index })
+      .eq("id", id);
+    if (error) {
+      throw new Error("No se pudo mover la categoría.");
+    }
+  }
+  refresh();
 }

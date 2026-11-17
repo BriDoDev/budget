@@ -99,7 +99,7 @@ export const listCategories = cache(async (budgetId: string): Promise<CategoryRo
     supabase
       .from("categories")
       .select(
-        "id, budget_id, group_id, name, kind, hidden, note, linked_account_id, sort_index, goal_type, goal_target, goal_target_month, goal_cadence_months, goal_needs_whole_amount, goal_created_month",
+        "id, budget_id, group_id, name, kind, hidden, note, linked_account_id, sort_index, goal_type, goal_target, goal_target_month, goal_cadence_months, goal_needs_whole_amount, goal_due_day, goal_created_month",
       )
       .eq("budget_id", budgetId)
       .order("sort_index")

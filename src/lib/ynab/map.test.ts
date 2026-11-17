@@ -136,7 +136,7 @@ describe("mapPlanExport goals and scheduled transactions", () => {
   const goalOf = (id: string) => rows.categories.find((row) => row.id === id);
 
   it("translates YNAB goal types, dates and cadences", () => {
-    expect(goalOf("vacation")).toMatchObject({ goal_type: "target_balance_by_date", goal_target: 12_000_000, goal_target_month: "2027-07-01", goal_created_month: "2026-08-01" });
+    expect(goalOf("vacation")).toMatchObject({ goal_type: "target_balance_by_date", goal_target: 12_000_000, goal_target_month: "2027-07-01", goal_due_day: 15, goal_created_month: "2026-08-01" });
     expect(goalOf("insurance")).toMatchObject({ goal_type: "needed_spending", goal_cadence_months: 12, goal_needs_whole_amount: false });
     expect(goalOf("coffee")).toMatchObject({ goal_type: "needed_spending", goal_target: 1_300_000, goal_cadence_months: 1, goal_target_month: null });
     expect(goalOf("rent")).toMatchObject({ goal_type: null, goal_target: null });

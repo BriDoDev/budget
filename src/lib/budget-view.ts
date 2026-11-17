@@ -50,6 +50,8 @@ export interface CategoryLine {
   goal: GoalStatus | null;
   /** Month the goal is due, when it has a date. */
   goalDueMonth: MonthKey | null;
+  /** Day of that month the goal is due; null means its last day. */
+  goalDueDay: number | null;
 }
 
 export interface CategoryGroupLine {
@@ -149,6 +151,7 @@ export function buildBudgetMonthView(rows: BudgetRows, month: MonthKey): BudgetM
             creditOverspent: values?.creditOverspent ?? 0,
             goal: goalStatus,
             goalDueMonth: goal ? goalDueMonth(goal, month) : null,
+            goalDueDay: category.goal_due_day,
           };
         });
       return {

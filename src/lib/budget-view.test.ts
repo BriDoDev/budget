@@ -9,6 +9,7 @@ const NO_GOAL = {
   goal_target_month: null,
   goal_cadence_months: 0,
   goal_needs_whole_amount: true,
+  goal_due_day: null,
   goal_created_month: null,
 } as const;
 

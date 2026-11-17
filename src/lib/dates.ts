@@ -22,15 +22,19 @@ export function formatMonthTitle(month: string): string {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
-/** "30 nov" for the last day of a month, with the year when it is not `referenceMonth`'s. */
-export function formatMonthEnd(month: string, referenceMonth: string): string {
+/**
+ * "15 nov" for a day of a month, with the year when it is not `referenceMonth`'s.
+ * Without a day, or with one the month does not have, it is the month's last day.
+ */
+export function formatDueDate(month: string, referenceMonth: string, day: number | null = null): string {
   const [year, monthNumber] = month.slice(0, 7).split("-").map(Number);
+  const lastDay = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
   const label = new Intl.DateTimeFormat(LOCALE, {
     day: "numeric",
     month: "short",
     year: month.slice(0, 4) === referenceMonth.slice(0, 4) ? undefined : "numeric",
     timeZone: "UTC",
-  }).format(new Date(Date.UTC(year, monthNumber, 0)));
+  }).format(new Date(Date.UTC(year, monthNumber - 1, Math.min(day ?? lastDay, lastDay))));
   return label.replace(/\./g, "");
 }
 

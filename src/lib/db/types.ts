@@ -60,6 +60,8 @@ export interface CategoryRow {
   goal_target_month: string | null;
   goal_cadence_months: number;
   goal_needs_whole_amount: boolean;
+  /** Day of the month the goal is due; null means the last day. */
+  goal_due_day: number | null;
   goal_created_month: string | null;
 }
 

@@ -33,6 +33,7 @@ const ICON_PATHS = {
   chevronLeft: <path d="M15 6l-6 6 6 6" />,
   chevronRight: <path d="M9 6l6 6-6 6" />,
   chevronDown: <path d="M6 9l6 6 6-6" />,
+  grip: <path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01" />,
   swap: <path d="M7 7h13l-3-3M17 17H4l3 3" />,
   alert: (
     <>
